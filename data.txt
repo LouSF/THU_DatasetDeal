@@ -1,0 +1,28 @@
+et_tal_activitynet.json
+5341
+et_tvg_didemo.json
+9367
+et_tal_hacs.json
+7689
+et_tvg_tacos.json
+3277
+et_tal_activitynet.json
+train:4272
+test:1069
+et_tvg_didemo.json
+train:11765
+test:2943
+et_tal_hacs.json
+train:17916
+test:4481
+et_tvg_tacos.json
+train:20537
+test:5137
+val/et_val_qvhighlights.json
+item:500
+val/et_val_thumos.json
+item:219
+all train:21256
+all test:5137
+
+Process finished with exit code 0
