@@ -6,7 +6,11 @@ import multiprocessing
 from tqdm import tqdm
 from typing import Optional
 
-dataset_base_path = '/yeesuanAI10/thumt/loushengfeng/Datasets/star'
+dataset_base_path = {
+    'star': '/yeesuanAI10/thumt/loushengfeng/Datasets/star',
+    'perception_test': '/yeesuanAI10/thumt/loushengfeng/Datasets/perception_test',
+    '': '',
+}
 video_base_path_list = os.path.join(dataset_base_path, 'videos')
 
 json_file_path_list = [
@@ -59,6 +63,7 @@ dataset_table_list = {
 
 def get_duration(path) -> Optional[bool]:
     if not os.path.exists(path):
+        print(f"video: {path} not found!")
         return False
     try:
         cmd = [
@@ -69,7 +74,7 @@ def get_duration(path) -> Optional[bool]:
             path
         ]
         output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        print(output)
+        # print(output)
         return True
     except Exception as e:
         print(f"\nError processing {path}: {str(e)}")
@@ -79,7 +84,9 @@ def get_duration(path) -> Optional[bool]:
 def process_video(video) -> Optional[bool]:
 
     video_path = video[dataset_table_star['video_path']]+'.mp4'
-    video_path = os.path.abspath(video_path)
+    video_path = os.path.join(video_base_path_list, video_path)
+
+    # print(video_path)
 
     if get_duration(video_path):
         return True

@@ -5,7 +5,7 @@ from job_scp import *
 
 json_save_path = 'json'
 raw_filename = 'et_instruct_164k_txt.json'
-json_save_all = 'et_164k_txt_1w.json'
+json_save_all = 'et_164k_txt_1w_ver2.json'
 all_file = []
 
 clip_list = {}

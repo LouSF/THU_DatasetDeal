@@ -5,7 +5,7 @@ from sympy import false
 import json
 import numpy as np
 
-json_path = "et_164k_txt_1w_raw_unique.json"
+json_path = "et_164k_txt_1w_ver2.json"
 
 with open(json_path, 'r') as json_file:
     json_data = json.load(json_file)
@@ -19,10 +19,10 @@ video_una = 0
 
 for record in json_data:
     F = False
-    for index in range(0, len(record['tgt']), 2):
+    for index in range(0, len(record['truth_tgt']), 2):
         si = False
-        for t in np.linspace(0.0, record['duration'], 32):
-            if (record['tgt'][index] <= t) and (record['tgt'][index + 1] >= t):
+        for t in np.linspace(0.0, record['duration'], 16):
+            if (record['truth_tgt'][index] <= t) and (record['truth_tgt'][index + 1] >= t):
                 si = True
         if si:
             acc += 1
