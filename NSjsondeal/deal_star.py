@@ -3,12 +3,14 @@ import re
 import sys
 import random
 import json
+import nltk
 import multiprocess
+import tqdm
 
 json_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/star"
 save_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/star/save"
 json_file_list = os.listdir(json_path)
-json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not rec.startswith("fixed")]
+json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not rec.endswith("fix.json")]
 json_label = json_path.split('/')[-1]
 
 select_type = ["Sequence", "Prediction", ]
@@ -28,6 +30,30 @@ prompt_mop = {
         "T3": r"^Which object would the person (.*?) next\?",
         "T4": r"^Which object would the person (.*?) next after they (.*?) the (.*?)\?",
     }
+}
+
+prompt_target = {
+    # t time
+    # v v
+    # d ved
+    # i ving
+    # n n
+    "Sequence":[
+        ("During {} to {}, the person did two things. Please list them sequentially.", 'tt',),
+        ("What did the person do from {} to {}? List the things they do sequentially.", 'tt',),
+        ("The person did A before B between {} and {}. What are A and B??", 'tt',),
+        ("The person did A after B between {} and {}. What are A and B?", 'tt',),
+        ("Focus on the segment {} - {}. What did the person do after they {}?", 'ttd',),
+        ("Focus on the segment {} - {}. What did the person do before they {}?", 'ttd',),
+        ("Answer the above question according to the video. Only use words from the following words to organize your answer.", '',),
+    ],
+    "Prediction":[
+        ("Which object did the person {} after they {} the ___ ? The ___.", 'vd',),
+        ("Which object did the person {} before they {} the ___ ? The ___.", 'vd'),
+        ("The person ___ the ___ after they ___ the ___.", '',),
+        ("The person ___ the ___ before they ___ the ___.", '',),
+        ("Choose words from the following words to fill in the blanks according to segment {} - {} of the video.", 'tt',),
+    ]
 }
 
 
@@ -59,7 +85,7 @@ def generate_question_templates(id, original_question, options, answer):
     answer_fixed = []
     matched_groups = match.groups() if match.lastindex else ()
     answer_fixed.extend(matched_groups)
-    answer_fixed.append(answer)
+    answer_fixed.append(answer.lower())
     answer = dict()
     answer.update(
         {
@@ -70,6 +96,7 @@ def generate_question_templates(id, original_question, options, answer):
     options_list = [item["choice"] for item in options]
     options_list.extend(matched_groups)
     options_list = list(set(options_list))
+    options_list = [rec.lower() for rec in options_list]
     random.shuffle(options_list)
 
     options_select = [options_list.index(i) for i in answer_fixed if i in options_list]
@@ -103,8 +130,8 @@ def main():
     fixed_json_files_dict = {}
     for index, json_list in json_files_dict.items():
         fixed_json_list = []
-        for rec in json_list:
-            # try:
+        for rec in tqdm.tqdm(json_list, total=len(json_list), desc=f"Processing {index}"):
+            try:
 
                 fixed_question, fixed_options, fixed_answers = generate_question_templates(rec['question_id'], rec['question'], rec['choices'], rec['answer'])
 
@@ -139,8 +166,8 @@ def main():
                         "options": fixed_options,
                     }
                 )
-            # except Exception as e:
-            #     print(e)
+            except Exception as e:
+                print(e)
 
         fixed_json_files_dict.update(
             {
