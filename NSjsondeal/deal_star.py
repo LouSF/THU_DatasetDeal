@@ -3,7 +3,7 @@ import re
 import sys
 import random
 import json
-import nltk
+from nltk.corpus import wordnet
 import multiprocess
 import tqdm
 
@@ -13,7 +13,9 @@ json_file_list = os.listdir(json_path)
 json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not rec.endswith("fix.json")]
 json_label = json_path.split('/')[-1]
 
-select_type = ["Sequence", "Prediction", ]
+# select_type = ["Sequence", "Prediction", ]
+select_type = ["Sequence", ]
+
 
 prompt_mop = {
     "Sequence": {
@@ -33,81 +35,167 @@ prompt_mop = {
 }
 
 prompt_target = {
-    # t time
-    # v v
-    # d ved
+    # s time start
+    # e time end
+    # b after or before
+    # o ving+obj
+    # d
     # i ving
     # n n
     "Sequence":[
-        ("During {} to {}, the person did two things. Please list them sequentially.", 'tt',),
-        ("What did the person do from {} to {}? List the things they do sequentially.", 'tt',),
-        ("The person did A before B between {} and {}. What are A and B??", 'tt',),
-        ("The person did A after B between {} and {}. What are A and B?", 'tt',),
-        ("Focus on the segment {} - {}. What did the person do after they {}?", 'ttd',),
-        ("Focus on the segment {} - {}. What did the person do before they {}?", 'ttd',),
+        ("During {} to {}, the person did two things. Please list them sequentially.", 'se',),
+        ("What did the person do from {} to {}? List the things they do sequentially.", 'se',),
+        ("The person did A {} B between {} and {}. What are A and B?", 'bse',),
+        ("Focus on the segment {} - {}. What did the person do {} they {}?", 'sebo',),
         ("Answer the above question according to the video. Only use words from the following words to organize your answer.", '',),
     ],
     "Prediction":[
-        ("Which object did the person {} after they {} the ___ ? The ___.", 'vd',),
-        ("Which object did the person {} before they {} the ___ ? The ___.", 'vd'),
-        ("The person ___ the ___ after they ___ the ___.", '',),
-        ("The person ___ the ___ before they ___ the ___.", '',),
-        ("Choose words from the following words to fill in the blanks according to segment {} - {} of the video.", 'tt',),
+        ("Which object did the person {} {} they {} the ___ ? The ___.", 'vbd'),
+        ("The person ___ the ___ {} they ___ the ___.", 'b',),
+        ("The person ___ the ___ {} they ___ the ___.", 'b',),
+        ("Choose words from the following words to fill in the blanks according to segment {} - {} of the video.", 'se',),
     ]
 }
 
+def regular_past_tense(verb):
+    """规则化生成过去式"""
+    if verb.endswith('e'):
+        return verb + 'd'
+    elif verb.endswith('y') and len(verb) > 1 and verb[-2] not in 'aeiou':
+        return verb[:-1] + 'ied'
+    elif verb.endswith(('c', 'g')) and len(verb) > 1 and verb[-2] in 'aeiou':
+        return verb + 'ked' if verb.endswith('c') else verb + 'ged'
+    elif len(verb) > 1 and verb[-1] in 'bcdfghjklmnpqrstvwxz' and verb[-2] in 'aeiou':
+        if len(verb) == 2 or (len(verb) > 2 and verb[-3] not in 'aeiou'):
+            return verb + verb[-1] + 'ed'
+    return verb + 'ed'
+
+def present_participle(verb):
+    """规则化生成现在分词"""
+    if verb.endswith('e') and len(verb) > 1:
+        if verb.endswith('ie'):
+            return verb[:-2] + 'ying'
+        elif verb not in ('be', 'see', 'flee', 'knee'):
+            return verb[:-1] + 'ing'
+    elif verb.endswith('y') and len(verb) > 1 and verb[-2] not in 'aeiou':
+        return verb + 'ing'
+    elif len(verb) > 2 and verb[-1] in 'bcdfghjklmnpqrstvwxz' and verb[-2] in 'aeiou' and verb[-3] not in 'aeiou':
+        return verb + verb[-1] + 'ing'
+    return verb + 'ing'
+
+def get_verb_forms(word):
+    """
+    获取动词的三种形式：原型(base)、过去式(past)、现在分词(present participle/ing)
+    返回一个字典：{'base': ..., 'past': ..., 'ing': ...}
+    """
+    forms = {'base': word, 'past': None, 'ing': None}
+
+    all_words = word.split()
+    word = all_words[0]
+
+    # 首先尝试从WordNet获取信息
+    synsets = wordnet.synsets(word, pos=wordnet.VERB)
+    if synsets:
+        lemmas = synsets[0].lemmas()
+        if lemmas:
+            related_forms = lemmas[0].derivationally_related_forms()
+
+            # 查找过去式
+            for form in related_forms:
+                if form.relationship().name() == 'past_tense':
+                    forms['past'] = form.name()
+                    break
+
+            # 查找现在分词
+            for form in related_forms:
+                if form.relationship().name() == 'present_participle':
+                    forms['ing'] = form.name()
+                    break
+
+    # 如果WordNet中没有找到过去式，使用规则生成
+    if forms['past'] is None:
+        forms['past'] = regular_past_tense(word)
+
+    # 如果WordNet中没有找到现在分词，使用规则生成
+    if forms['ing'] is None:
+        forms['ing'] = present_participle(word)
 
 
-def generate_question_templates(id, original_question, options, answer):
-    target_id = id.split('_')
+    forms['ing'] = "".join([forms['ing'], all_words[1:]])
+    forms['base'] = "".join([forms['base'], all_words[1:]])
+    forms['past'] = "".join([forms['past'], all_words[1:]])
+    return forms
+
+
+def generate_question_templates(rec: dict):
+    target_id = rec["question_id"].split('_')
     target_template = prompt_mop[target_id[0]][target_id[1]]
 
-    match = re.search(target_template, original_question)
+    time_index = 'before' if 'before' in rec["question"] else 'after'
+
+    match = re.search(target_template, rec["question"])
     if not match:
         raise ValueError(
-            f"Template '{target_template}' not found in question: '{original_question}'"
+            f"Template '{target_template}' not found in question: '{rec["question"]}'"
         )
-
-    fixed_question = original_question
-    last_pos = 0
-    parts = []
-
-    spans = [match.span(i) for i in range(1, match.lastindex + 1)] if match.lastindex else []
-
-    for start, end in spans:
-        parts.append(fixed_question[last_pos:start])
-        parts.append("____")
-        last_pos = end
-
-    parts.append(fixed_question[last_pos:])
-    fixed_question = "".join(parts)
-
-    answer_fixed = []
     matched_groups = match.groups() if match.lastindex else ()
-    answer_fixed.extend(matched_groups)
-    answer_fixed.append(answer.lower())
-    answer = dict()
-    answer.update(
-        {
-            "respond": answer_fixed
-        }
-    )
 
-    options_list = [item["choice"] for item in options]
-    options_list.extend(matched_groups)
-    options_list = list(set(options_list))
-    options_list = [rec.lower() for rec in options_list]
-    random.shuffle(options_list)
+    create_option = "Q+A" if len(matched_groups) > 2 else ""
 
-    options_select = [options_list.index(i) for i in answer_fixed if i in options_list]
+    answers_list = []
 
-    answer.update(
-        {
-            "select": options_select
-        }
-    )
+    # if create_option == "Q+A":
+    #     answers_list.append((get_verb_forms(matched_groups[0])['ing'] + " " + rec["answer"][:-1]).lower())
+    #     answers_list.append((get_verb_forms(matched_groups[1])['ing'] + " " + matched_groups[2]).lower())
+    # else:
+    #     answers_list.append((get_verb_forms(matched_groups[0])['ing'] + " " + matched_groups[1]).lower())
+    #     answers_list.append((get_verb_forms(rec["answer"][:-1])['ing'] + " " + matched_groups[2]).lower())
 
-    return fixed_question, options_list, answer
+    if create_option == "Q+A":
+        answers_list.append((matched_groups[0] + " the " + rec["answer"][:-1]).lower())
+        answers_list.append((matched_groups[1] + " the " + matched_groups[2]).lower())
+    else:
+        answers_list.append((matched_groups[0] + " the " + matched_groups[1]).lower())
+        temp_answer_tamplate = rec["answer"].split()
+        answers_list.append((temp_answer_tamplate[0] + " the " + temp_answer_tamplate[2]).lower())
+
+    fixed_question = ""
+
+    choice_group = random.choice(prompt_target[target_id[0]][:-1])
+    choice_prompt = choice_group[0]
+
+    func_list = []
+    for func in choice_group[1]:
+        if func == 's':
+            func_list.append(rec["start"])
+        elif func == 'e':
+            func_list.append(rec["end"])
+        elif func == 'b':
+            func_list.append(time_index)
+        elif func == 'o':
+            func_list.append(answers_list[0])
+            answers_list = [answers_list[1]]
+    if len(func_list) != 0:
+        fixed_question = choice_prompt.format(*func_list)
+
+    choice_group = prompt_target[target_id[0]][-1]
+    choice_prompt = choice_group[0]
+
+    func_list = []
+    for func in choice_group[1]:
+        if func == 's':
+            func_list.append(rec["start"])
+        elif func == 'e':
+            func_list.append(rec["end"])
+    if len(func_list) != 0:
+        choice_prompt = choice_prompt.format(*func_list)
+
+    fixed_question = fixed_question.join([choice_prompt])
+
+    return fixed_question, answers_list
+
+    # return fixed_question, fixed_options, answers_list
+
 
 
 def main():
@@ -122,8 +210,9 @@ def main():
     for index, json_list in json_files_dict.items():
         json_files_dict[index] = [
             rec for rec in json_list
-            if rec['question_id'].startswith('Sequence') or
-               rec['question_id'].startswith('Prediction')
+            if rec['question_id'].startswith('Sequence')
+               # or
+               # rec['question_id'].startswith('Prediction')
             ]
 
     # change dataset
@@ -131,9 +220,11 @@ def main():
     for index, json_list in json_files_dict.items():
         fixed_json_list = []
         for rec in tqdm.tqdm(json_list, total=len(json_list), desc=f"Processing {index}"):
-            try:
+            # try:
 
-                fixed_question, fixed_options, fixed_answers = generate_question_templates(rec['question_id'], rec['question'], rec['choices'], rec['answer'])
+                # fixed_question, fixed_options, fixed_answers = generate_question_templates(rec)
+                fixed_question, fixed_answers = generate_question_templates(rec)
+
 
                 fixed_json_list.append(
                     {
@@ -155,19 +246,19 @@ def main():
                             {
                                 "from": "gpt",
                                 "type": "select_option",
-                                "value": fixed_answers["select"],
+                                "value": fixed_answers,
                             },
-                            {
-                                "from": "gpt",
-                                "type": "text",
-                                "value": fixed_answers["respond"],
-                            }
+                            # {
+                            #     "from": "gpt",
+                            #     "type": "text",
+                            #     "value": fixed_answers["respond"],
+                            # }
                         ],
-                        "options": fixed_options,
+                        # "options": fixed_options,
                     }
                 )
-            except Exception as e:
-                print(e)
+            # except Exception as e:
+            #     print(e)
 
         fixed_json_files_dict.update(
             {
