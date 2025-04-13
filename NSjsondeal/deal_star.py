@@ -1,121 +1,86 @@
 import os
+import re
 import sys
 import random
 import json
 import multiprocess
 
 json_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/star"
+save_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/star/save"
 json_file_list = os.listdir(json_path)
 json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not rec.startswith("fixed")]
 json_label = json_path.split('/')[-1]
 
+select_type = ["Sequence", "Prediction", ]
 
 prompt_mop = {
     "Sequence": {
-        "T1": r"^Which object did the person (\w+) after they (\w+)ed the (\w+)?",
-        "T2": r"^Which object did the person (\w+) before they (\w+)ed the (\w+)?",
-        "T3": r"^What happened after the person (\w+)ed the (\w+)?",
-        "T4": r"^What happened before the person (\w+)ed the (\w+)?",
-        "T5": r"^What did the person do to the (\w+) after (\w+)ing the (\w+)?",
-        "T6": r"^What did the person do to the (\w+) before (\w+)ing the (\w+)?",
+        "T1": r"^Which object did the person (.*?) after they (.*?) the (.*?)\?",
+        "T2": r"^Which object did the person (.*?) before they (.*?) the (.*?)\?",
+        "T3": r"^What happened after the person (.*?) the (.*?)\?",
+        "T4": r"^What happened before the person (.*?) the (.*?)\?",
+        "T5": r"^What did the person do to the (.*?) after (.*?) the (.*?)\?",
+        "T6": r"^What did the person do to the (.*?) before (.*?) the (.*?)\?",
     },
     "Prediction": {
         "T1": r"^What will the person do next?",
-        "T2": r"^What will the person do next with the (\w+)?",
-        "T3": r"^Which object would the person (\w+) next?",
-        "T4": r"^Which object would the person (\w+) next after they (\w+) the (\w+)?",
+        "T2": r"^What will the person do next with the (.*?)\?",
+        "T3": r"^Which object would the person (.*?) next\?",
+        "T4": r"^Which object would the person (.*?) next after they (.*?) the (.*?)\?",
     }
 }
 
-templates_func1 = [
-        "Describe two consecutive events in the video where the first action directly triggers the second.",
-        "One thing happens in the video, and another thing happens after it. What are these two things?",
-    ]
 
-templates_func2 = [
-        "Complete the sequence: The video first shows ______, then later shows ______.",
-        "The main event is ______. What happens immediately after this?",
-        "Complete the sequence: The video first shows ______, then later shows ______.",
-    ]
 
-def generate_question_templates(original_question, options, answer, add_template) -> (dict, dict, dict):
-    templates_func1 = [
-        "Describe two consecutive events in the video where the first action directly triggers the second.",
-        "One thing happens in the video, and another thing happens after it. What are these two things?",
-    ]
+def generate_question_templates(id, original_question, options, answer):
+    target_id = id.split('_')
+    target_template = prompt_mop[target_id[0]][target_id[1]]
 
-    templates_func2 = [
-        "Complete the sequence: The video first shows ______, then later shows ______.",
-        "The main event is ______. What happens immediately after this?",
-        "Complete the sequence: The video first shows ______, then later shows ______.",
-    ]
-
-    templates_question, templates_options, templates_answer = {}, {}, {}
-
-    # func1 视频中有一件事情发生，在此事以后有另一件事情发生，这两件事情分别是什么？ _ 选项 A B C D E
-    func1 = {}
-    for index, func in enumerate(templates_func1):
-        func1.update(
-            {
-                index: templates_func1[index]
-            }
+    match = re.search(target_template, original_question)
+    if not match:
+        raise ValueError(
+            f"Template '{target_template}' not found in question: '{original_question}'"
         )
-    templates_question.update(
+
+    fixed_question = original_question
+    last_pos = 0
+    parts = []
+
+    spans = [match.span(i) for i in range(1, match.lastindex + 1)] if match.lastindex else []
+
+    for start, end in spans:
+        parts.append(fixed_question[last_pos:start])
+        parts.append("____")
+        last_pos = end
+
+    parts.append(fixed_question[last_pos:])
+    fixed_question = "".join(parts)
+
+    answer_fixed = []
+    matched_groups = match.groups() if match.lastindex else ()
+    answer_fixed.extend(matched_groups)
+    answer_fixed.append(answer)
+    answer = dict()
+    answer.update(
         {
-            "func1": func1,
+            "respond": answer_fixed
         }
     )
 
+    options_list = [item["choice"] for item in options]
+    options_list.extend(matched_groups)
+    options_list = list(set(options_list))
+    random.shuffle(options_list)
 
-    # func2 填空：在 _ 后发生了 _ 选项 A B C D E
-    func2 = {}
-    for index, func in enumerate(templates_func1):
-        func2.update(
-            {
-                index: templates_func2[index]
-            }
-        )
-    templates_question.update(
+    options_select = [options_list.index(i) for i in answer_fixed if i in options_list]
+
+    answer.update(
         {
-            "func2": func2,
+            "select": options_select
         }
     )
 
-    # 答案与选项处理
-    fixed_answer = []
-    fixed_answer.append(options[answer])
-    fixed_answer.append("".join([add_template["subject"], add_template["verb"], add_template["object"]]))
-
-    options.extend(fixed_answer)
-    options = list(set(options))
-    random.shuffle(options)
-
-
-    templates_options = {
-        int(index): item
-        for index, item in enumerate(options)
-    }
-
-    right_answer_options = []
-    for key, item in templates_options.items():
-        if item in fixed_answer:
-            right_answer_options.append(key)
-
-    templates_answer.update(
-        {
-            "func1": right_answer_options
-        }
-    )
-
-    templates_answer.update(
-        {
-            "func2": fixed_answer
-        }
-    )
-
-    return templates_question, templates_options, templates_answer
-
-select_type = ["Sequence", "Prediction", ]
+    return fixed_question, options_list, answer
 
 
 def main():
@@ -139,12 +104,9 @@ def main():
     for index, json_list in json_files_dict.items():
         fixed_json_list = []
         for rec in json_list:
-            try:
+            # try:
 
-                dataset_type = rec['question_id'].split('_')[0]
-                task_id = rec['question_id'].split('_')[1]
-
-
+                fixed_question, fixed_options, fixed_answers = generate_question_templates(rec['question_id'], rec['question'], rec['choices'], rec['answer'])
 
                 fixed_json_list.append(
                     {
@@ -156,20 +118,29 @@ def main():
                             rec['start'],
                             rec['end'],
                         ],
+                        "original_question": rec['question'],
+                        "original_answer": rec['answer'],
                         "conversations": [
                             {
                                 "from": "human",
-                                "value": rec['question'],
+                                "value": fixed_question,
                             },
                             {
                                 "from": "gpt",
-                                "value": rec['answer'],
+                                "type": "select_option",
+                                "value": fixed_answers["select"],
+                            },
+                            {
+                                "from": "gpt",
+                                "type": "text",
+                                "value": fixed_answers["respond"],
                             }
                         ],
+                        "options": fixed_options,
                     }
                 )
-            except Exception as e:
-                print(e)
+            # except Exception as e:
+            #     print(e)
 
         fixed_json_files_dict.update(
             {
@@ -179,7 +150,7 @@ def main():
 
     for index, json_list in fixed_json_files_dict.items():
         print(f"|{index}|{len(json_list)}|")
-        with open(os.path.join(json_path, f'fixed_{index}'), 'w') as file:
+        with open(os.path.join(save_path, f'fixed_{index}'), 'w') as file:
             json.dump(json_list, file, indent=4)
 
 
