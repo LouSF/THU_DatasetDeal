@@ -21,9 +21,10 @@ client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=BASE_URL)
 
 dataset_file = []
 
-json_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/nextqa"
+json_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/nextqa/middle_json"
+save_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/nextqa/finish_json"
 json_file_list = os.listdir(json_path)
-json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not rec.startswith("fixed")]
+json_file_list = [rec for rec in json_file_list if rec.endswith("mulit.json") and rec.startswith("fixed")]
 json_label = json_path.split('/')[-1]
 
 select_type = ["TN", "TP", "TC", "CW",]
@@ -108,7 +109,7 @@ def generate_with_deepseek(
     raise ValueError(f"Failed after {max_retries} retries.")
 
 
-def generate_question_templates(original_question, options, answer, function):
+def generate_question_templates(original_question, options, answer, add_template) -> (dict, dict, dict):
     templates_func1 = [
         "Describe two consecutive events in the video where the first action directly triggers the second.",
         "One thing happens in the video, and another thing happens after it. What are these two things?",
@@ -120,17 +121,68 @@ def generate_question_templates(original_question, options, answer, function):
         "Complete the sequence: The video first shows ______, then later shows ______.",
     ]
 
-    templates_question, templates_options, templates_answer = [], [], []
+    templates_question, templates_options, templates_answer = {}, {}, {}
 
     # func1 视频中有一件事情发生，在此事以后有另一件事情发生，这两件事情分别是什么？ _ 选项 A B C D E
-    if function == 'func1':
-        pass
+    func1 = {}
+    for index, func in enumerate(templates_func1):
+        func1.update(
+            {
+                index: templates_func1[index]
+            }
+        )
+    templates_question.update(
+        {
+            "func1": func1,
+        }
+    )
+
 
     # func2 填空：在 _ 后发生了 _ 选项 A B C D E
-    if function == 'func2':
-        pass
+    func2 = {}
+    for index, func in enumerate(templates_func1):
+        func2.update(
+            {
+                index: templates_func2[index]
+            }
+        )
+    templates_question.update(
+        {
+            "func2": func2,
+        }
+    )
+
+    # 答案与选项处理
+    fixed_answer = []
+    fixed_answer.append(options[answer])
+    fixed_answer.append("".join([add_template["subject"], add_template["verb"], add_template["object"]]))
+
+    options.extend(fixed_answer)
+    options = list(set(options))
+    random.shuffle(options)
 
 
+    templates_options = {
+        int(index): item
+        for index, item in enumerate(options)
+    }
+
+    right_answer_options = []
+    for key, item in templates_options.items():
+        if item in fixed_answer:
+            right_answer_options.append(key)
+
+    templates_answer.update(
+        {
+            "func1": right_answer_options
+        }
+    )
+
+    templates_answer.update(
+        {
+            "func2": fixed_answer
+        }
+    )
 
     return templates_question, templates_options, templates_answer
 
@@ -143,45 +195,36 @@ def main():
         with open(os.path.join(json_path, json_file_name), 'r') as file:
             json_files_dict[json_file_name] = json.load(file)
 
-    # split useful data
-    for index, json_list in json_files_dict.items():
-        json_files_dict[index] = [
-            rec for rec in json_list
-            if rec['metadata']['type'] in select_type
-        ]
-
-
     # change dataset
     fixed_json_files_dict = {}
     for index, json_list in json_files_dict.items():
         fixed_json_list = []
         for rec in tqdm.tqdm(json_list, total=len(json_list), desc=index):
+
             try:
-                question, option, answer = generate_question_templates(rec['question'], rec['answer'], rec['options'], "func1")
+                add_laun = rec['conv2']['actions'][0]
+                question, option, answer = generate_question_templates(rec['question'], rec['options'], rec['answer'],
+                                                                       add_laun)
                 fixed_json_list.append(
                     {
-                        "dataset": json_label,
-                        "task": rec['metadata']['type'],
-                        'id': rec['video'],
+                        "dataset": rec['dataset'],
+                        "task": rec['task'],
+                        'id': rec['id'],
                         "video": rec['video'],
+
                         "question": question,
                         "answer": answer,
-                        "options": rec['options'],
-                        "conversations": [
-                            {
-                                "from": "human",
-                                "value": rec['question'],
-                            },
-                            {
-                                "from": "gpt",
-                                "value": rec['options'][rec['answer']],
-                            },
-                        ],
-                        "conv2": generate_with_deepseek(rec['question']),
+                        "options": option,
+
+                        "original_question": rec['question'],
+                        "original_answer": rec['answer'],
+                        "original_options": rec['options'],
+                        "conv2": rec['conv2'],
                     }
                 )
             except Exception as e:
                 print(e)
+
 
         fixed_json_files_dict.update(
             {
@@ -190,7 +233,7 @@ def main():
         )
 
     for index, json_list in fixed_json_files_dict.items():
-        with open(os.path.join(json_path, f'fixed_{index}_gpt_fixed'), 'w') as file:
+        with open(os.path.join(save_path, f'{index.split('.')[0]}_all.json'), 'w') as file:
             json.dump(json_list, file, indent=4)
 
     for index, json_list in fixed_json_files_dict.items():

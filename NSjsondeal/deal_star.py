@@ -38,6 +38,83 @@ templates_func2 = [
         "Complete the sequence: The video first shows ______, then later shows ______.",
     ]
 
+def generate_question_templates(original_question, options, answer, add_template) -> (dict, dict, dict):
+    templates_func1 = [
+        "Describe two consecutive events in the video where the first action directly triggers the second.",
+        "One thing happens in the video, and another thing happens after it. What are these two things?",
+    ]
+
+    templates_func2 = [
+        "Complete the sequence: The video first shows ______, then later shows ______.",
+        "The main event is ______. What happens immediately after this?",
+        "Complete the sequence: The video first shows ______, then later shows ______.",
+    ]
+
+    templates_question, templates_options, templates_answer = {}, {}, {}
+
+    # func1 视频中有一件事情发生，在此事以后有另一件事情发生，这两件事情分别是什么？ _ 选项 A B C D E
+    func1 = {}
+    for index, func in enumerate(templates_func1):
+        func1.update(
+            {
+                index: templates_func1[index]
+            }
+        )
+    templates_question.update(
+        {
+            "func1": func1,
+        }
+    )
+
+
+    # func2 填空：在 _ 后发生了 _ 选项 A B C D E
+    func2 = {}
+    for index, func in enumerate(templates_func1):
+        func2.update(
+            {
+                index: templates_func2[index]
+            }
+        )
+    templates_question.update(
+        {
+            "func2": func2,
+        }
+    )
+
+    # 答案与选项处理
+    fixed_answer = []
+    fixed_answer.append(options[answer])
+    fixed_answer.append("".join([add_template["subject"], add_template["verb"], add_template["object"]]))
+
+    options.extend(fixed_answer)
+    options = list(set(options))
+    random.shuffle(options)
+
+
+    templates_options = {
+        int(index): item
+        for index, item in enumerate(options)
+    }
+
+    right_answer_options = []
+    for key, item in templates_options.items():
+        if item in fixed_answer:
+            right_answer_options.append(key)
+
+    templates_answer.update(
+        {
+            "func1": right_answer_options
+        }
+    )
+
+    templates_answer.update(
+        {
+            "func2": fixed_answer
+        }
+    )
+
+    return templates_question, templates_options, templates_answer
+
 select_type = ["Sequence", "Prediction", ]
 
 
