@@ -124,8 +124,9 @@ def main():
                                 "task": "mc_question",
                                 'id': rec['metadata']['video_id'],
                                 "video": rec['metadata']['video_id'] + '.mp4',
-                                "original_question": "NO " + json_label,
-                                "original_answer": "NO " + json_label,
+                                "original_question": None,
+                                "original_answer": None,
+                                "tgt": None,
                                 "conversations": [
                                     {
                                         "from": "human",

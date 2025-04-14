@@ -3,9 +3,11 @@ import re
 import sys
 import random
 import json
-from nltk.corpus import wordnet
 import multiprocess
 import tqdm
+
+import spacy
+from lemminflect import getLemma, getInflection
 
 json_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/star"
 save_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/star/save"
@@ -14,7 +16,6 @@ json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not
 json_label = json_path.split('/')[-1]
 
 select_type = ["Sequence", "Prediction", ]
-
 
 prompt_mop = {
     "Sequence": {
@@ -38,6 +39,7 @@ prompt_target = {
     # e time end
     # b after or before
     # o ving+obj
+    # j ved+obj
     # v base v
     # d past v
     # n n
@@ -47,7 +49,7 @@ prompt_target = {
             ("During {} to {}, the person did two things. Please list them sequentially.", 'se',),
             ("What did the person do from {} to {}? List the things they do sequentially.", 'se',),
             ("The person did A {} B between {} and {}. What are A and B?", 'bse',),
-            ("Focus on the segment {} - {}. What did the person do {} they {}?", 'sebo',),
+            ("Focus on the segment {} - {}. What did the person do {} they {}?", 'sebj',),
             ("Answer the above question according to the video. Only use words from the following words to organize your answer.", '',),
         ],
         # [
@@ -66,74 +68,38 @@ prompt_target = {
 
 }
 
-def regular_past_tense(verb):
-    """规则化生成过去式"""
-    if verb.endswith('e'):
-        return verb + 'd'
-    elif verb.endswith('y') and len(verb) > 1 and verb[-2] not in 'aeiou':
-        return verb[:-1] + 'ied'
-    elif verb.endswith(('c', 'g')) and len(verb) > 1 and verb[-2] in 'aeiou':
-        return verb + 'ked' if verb.endswith('c') else verb + 'ged'
-    elif len(verb) > 1 and verb[-1] in 'bcdfghjklmnpqrstvwxz' and verb[-2] in 'aeiou':
-        if len(verb) == 2 or (len(verb) > 2 and verb[-3] not in 'aeiou'):
-            return verb + verb[-1] + 'ed'
-    return verb + 'ed'
 
-def present_participle(verb):
-    """规则化生成现在分词"""
-    if verb.endswith('e') and len(verb) > 1:
-        if verb.endswith('ie'):
-            return verb[:-2] + 'ying'
-        elif verb not in ('be', 'see', 'flee', 'knee'):
-            return verb[:-1] + 'ing'
-    elif verb.endswith('y') and len(verb) > 1 and verb[-2] not in 'aeiou':
-        return verb + 'ing'
-    elif len(verb) > 2 and verb[-1] in 'bcdfghjklmnpqrstvwxz' and verb[-2] in 'aeiou' and verb[-3] not in 'aeiou':
-        return verb + verb[-1] + 'ing'
-    return verb + 'ing'
+def get_verb_forms(verb_phrase):
+    words = verb_phrase.split()
 
-def get_verb_forms(word):
-    """
-    获取动词的三种形式：原型(base)、过去式(past)、现在分词(present participle/ing)
-    返回一个字典：{'base': ..., 'past': ..., 'ing': ...}
-    """
-    forms = {'base': word, 'past': None, 'ing': None}
+    if not words:
+        return {}
 
-    all_words = word.split()
-    word = all_words[0]
+    # 只对第一个词进行变位
+    verb = words[0]
+    other_words = words[1:] if len(words) > 1 else []
 
-    # 首先尝试从WordNet获取信息
-    synsets = wordnet.synsets(word, pos=wordnet.VERB)
-    if synsets:
-        lemmas = synsets[0].lemmas()
-        if lemmas:
-            related_forms = lemmas[0].derivationally_related_forms()
+    try:
+        base = getLemma(verb, upos='VERB')[0]
+        past = getInflection(verb, tag='VBD')[0]
+        past_part = getInflection(verb, tag='VBN')[0]
+        pres_part = getInflection(verb, tag='VBG')[0]
+    except (IndexError, TypeError):
+        # 如果变位失败，使用原形
+        base = verb
+        past = verb
+        past_part = verb
+        pres_part = verb
 
-            # 查找过去式
-            for form in related_forms:
-                if form.relationship().name() == 'past_tense':
-                    forms['past'] = form.name()
-                    break
+    # 组合非动词部分
+    other_part = ' '.join(other_words) if other_words else ''
 
-            # 查找现在分词
-            for form in related_forms:
-                if form.relationship().name() == 'present_participle':
-                    forms['ing'] = form.name()
-                    break
-
-    # 如果WordNet中没有找到过去式，使用规则生成
-    if forms['past'] is None:
-        forms['past'] = regular_past_tense(word)
-
-    # 如果WordNet中没有找到现在分词，使用规则生成
-    if forms['ing'] is None:
-        forms['ing'] = present_participle(word)
-
-
-    forms['ing'] = "".join([forms['ing'], all_words[1:]])
-    forms['base'] = "".join([forms['base'], all_words[1:]])
-    forms['past'] = "".join([forms['past'], all_words[1:]])
-    return forms
+    return {
+        'base': f"{base} {other_part}".strip(),
+        'past': f"{past} {other_part}".strip(),
+        'past_participle': f"{past_part} {other_part}".strip(),
+        'present_participle': f"{pres_part} {other_part}".strip()
+    }
 
 def generate_question_templates_Prediction(rec: dict):
     target_id = rec["question_id"].split('_')
@@ -197,7 +163,7 @@ def generate_question_templates_Prediction(rec: dict):
             func_list.append(answers_list[0])
             answers_list = [answers_list[1]]
         elif func == 'k':
-            func_list.append(matched_groups[ind])
+            func_list.append(get_verb_forms(matched_groups[ind])['base'])
             ind += 1
     if len(func_list) != 0:
         fixed_question = choice_prompt.format(*func_list)
@@ -214,7 +180,7 @@ def generate_question_templates_Prediction(rec: dict):
     if len(func_list) != 0:
         choice_prompt = choice_prompt.format(*func_list)
 
-    fixed_question = fixed_question.join([choice_prompt])
+    fixed_question = "".join([fixed_question, choice_prompt])
 
     fixed_options = [item["choice"] for item in rec["choices"]]
 
@@ -253,10 +219,10 @@ def generate_question_templates_Sequence(rec: dict):
     #     answers_list.append((get_verb_forms(rec["answer"][:-1])['ing'] + " " + matched_groups[2]).lower())
 
     if create_option == "Q+A":
-        answers_list.append((matched_groups[0] + " the " + rec["answer"]).lower())
-        answers_list.append((matched_groups[1] + " the " + matched_groups[2]).lower())
+        answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " the " + rec["answer"]).lower())
+        answers_list.append((get_verb_forms(matched_groups[1])['present_participle'] + " the " + matched_groups[2]).lower())
     else:
-        answers_list.append((matched_groups[0] + " the " + matched_groups[1]).lower())
+        answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " the " + matched_groups[1]).lower())
         # temp_answer_tamplate = rec["answer"].split(" the ")
         # answers_list.append((temp_answer_tamplate[0] + " the " + temp_answer_tamplate[2]).lower())
         answers_list.append(rec["answer"].lower())
@@ -280,7 +246,10 @@ def generate_question_templates_Sequence(rec: dict):
         elif func == 'b':
             func_list.append(time_index)
         elif func == 'o':
-            func_list.append(answers_list[0])
+            func_list.append(get_verb_forms(answers_list[0])['present_participle'])
+            answers_list = [get_verb_forms(answers_list[1])["present_participle"]]
+        elif func == 'j':
+            func_list.append(get_verb_forms(answers_list[0])["past"])
             answers_list = [answers_list[1]]
     if len(func_list) != 0:
         fixed_question = choice_prompt.format(*func_list)
@@ -297,7 +266,7 @@ def generate_question_templates_Sequence(rec: dict):
     if len(func_list) != 0:
         choice_prompt = choice_prompt.format(*func_list)
 
-    fixed_question = fixed_question.join([choice_prompt])
+    fixed_question = "".join([fixed_question, choice_prompt])
 
     fixed_options = [item["choice"] for item in rec["choices"]]
 
@@ -309,7 +278,7 @@ def generate_question_templates_Sequence(rec: dict):
     fixed_options = list(set(fixed_options))
     random.shuffle(fixed_options)
 
-    return fixed_question, fixed_options, answers_list
+    return fixed_question, None, answers_list
 
 
 

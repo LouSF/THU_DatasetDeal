@@ -1,3 +1,17 @@
+import os
+import re
+import sys
+import random
+import json
+import multiprocess
+import tqdm
+
+json_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/Complise/PercepTest"
+save_path = "/Users/lsf/PycharmProjects/DatasetJson/NSjsondeal/middle/PercepTest"
+json_file_list = os.listdir(json_path)
+json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not rec.startswith("fix")]
+json_label = json_path.split('/')[-1]
+
 all_selc = [
     "How many letters changed position in the word after shuffling?",
     "How many objects did you see the person placing in the door area?",
@@ -87,3 +101,62 @@ all_selc = [
     "Which of the following describes better the actions done by the person?",
     "Is the configuration of objects likely to be stable after placing the last object?",
 ]
+
+def main():
+
+    # read files
+    json_files_dict = {}
+    for json_file_name in json_file_list:
+        with open(os.path.join(json_path, json_file_name), 'r') as file:
+            json_files_dict[json_file_name] = json.load(file)
+
+    # change dataset
+    fixed_json_files_dict = {}
+    for index, json_list in json_files_dict.items():
+        fixed_json_list = []
+        for key, rec in tqdm.tqdm(json_list.items(), total=len(json_list), desc=f"Processing {index}"):
+            try:
+                for choice in rec['mc_question'] or 'train' not in index:
+                    if choice["question"] in all_selc:
+                        fixed_json_list.append(
+                            {
+                                "dataset": json_label,
+                                "task": "counting_question" if choice in rec['mc_question'] else "not_counting",
+                                'id': rec['metadata']['video_id'],
+                                "video": rec['metadata']['video_id'] + '.mp4',
+                                "original_question": None,
+                                "original_answer": None,
+                                "tgt": None,
+                                "conversations": [
+                                    {
+                                        "from": "human",
+                                        "value": choice["question"],
+                                    },
+                                    {
+                                        "from": "gpt",
+                                        "type": "select_option",
+                                        "value": choice["answer_id"],
+                                    },
+                                ],
+                                "options": choice["options"],
+                            }
+                        )
+            except Exception as e:
+                print(e)
+
+        fixed_json_files_dict.update(
+            {
+                index: fixed_json_list
+            }
+        )
+
+    for index, json_list in fixed_json_files_dict.items():
+        print(f"|{index}|{len(json_list)}|")
+        with open(os.path.join(save_path, f'fixed_{index}'), 'w') as file:
+            json.dump(json_list, file, indent=4)
+
+
+
+
+if __name__ == "__main__":
+    main()
