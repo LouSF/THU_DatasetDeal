@@ -18,13 +18,13 @@ for train_f in file_train_list:
     with open(train_f, 'r') as f:
         _ = json.load(f)
         random.shuffle(_)
-        train_rec.extend(_[:500])
+        train_rec.extend(_[:5000])
 
 for val_f in file_val_list:
     with open(val_f, 'r') as f:
         _ = json.load(f)
         random.shuffle(_)
-        val_rec.extend(_[:250])
+        val_rec.extend(_[:500])
 
 
 with open(os.path.join(os.path.join('sigle', 'train_comb.json')), 'w') as f:
