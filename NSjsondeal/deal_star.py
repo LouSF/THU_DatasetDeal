@@ -51,23 +51,23 @@ prompt_target = {
     #k keep
     "Sequence": [
         [
-            ("During {}seconds to {}seconds, the person did two things. Please list them sequentially.", 'se', 'S00'),
-            ("What did the person do from {}seconds to {}seconds? List the things they do sequentially.", 'se', 'S01'),
-            ("The person did A {} B between {}seconds and {}seconds. What are A and B?", 'bse', 'S02'),
-            ("Focus on the segment {}seconds - {}seconds. What did the person do {} they {}?", 'sebj', 'S03'),
+            ("During {} seconds to {} seconds, the person did two things. Please list them sequentially.", 'se', 'S00'),
+            ("What did the person do from {} seconds to {} seconds? List the things they do sequentially.", 'se', 'S01'),
+            ("The person did A {} B between {} seconds and {} seconds. What are A and B?", 'bse', 'S02'),
+            ("Focus on the segment {} seconds - {} seconds. What did the person do {} they {}?", 'sebj', 'S03'),
             ("Answer the above question according to the video. Only use words from the following words to organize your answer.", '', 'S04',),
         ],
         [
             ("Which object did the person {} {} they {} ___? ___.", 'vbd', 'S10'), # todo "Which object did the person {} {} they {} the ___ ? the ___."
             ("The person ___ {} they ___.", 'b', 'S11'), # todo "The person ___ the ___ {} they ___ the ___."
-            ("Choose words from the following words to fill in the blanks according to segment {}seconds - {}seconds of the video.", 'se', 'S12'),
+            ("Choose words from the following words to fill in the blanks according to segment {} seconds - {} seconds of the video.", 'se', 'S12'),
         ]
     ],
     "Prediction":[
-        ("What will the person do after {}seconds - {}seconds?", "se", 'P0'),
-        ("What will the person do next with the {} after {}seconds - {}seconds?", "nse", 'P1'),
-        ("Which object would the person {} after {}seconds - {}seconds?", "vse", 'P2'),
-        ("According to {}seconds - {}seconds, which object would the person {} next after they {} the {}?", "sekkk", 'P3'),
+        ("What will the person do after {} seconds - {} seconds?", "se", 'P0'),
+        ("What will the person do next with the {} after {} seconds - {} seconds?", "nse", 'P1'),
+        ("Which object would the person {} after {} seconds - {} seconds?", "vse", 'P2'),
+        ("According to {} seconds - {} seconds, which object would the person {} next after they {} the {}?", "sekkk", 'P3'),
         ("Choose answer from the following options.", "", 'P4'),
     ]
 
@@ -111,6 +111,7 @@ def generate_question_templates_Prediction(rec: dict):
     target_template = prompt_mop[target_id[0]][target_id[1]]
 
     time_index = 'before' if 'before' in rec["question"] else 'after'
+    # time_index = 'after' if 'before' in rec["question"] else 'before'
 
     match = re.search(target_template, rec["question"])
     if not match:
@@ -226,11 +227,14 @@ def generate_question_templates_Sequence(rec: dict):
 
     create_option = "Q+A" if len(matched_groups) > 2 else ""
 
-    if create_option == "Q+A" and rec_type== 'S10': # todo
+    if create_option == "Q+A" and rec_type == 'S10': # todo
         create_option = "Q+A+V_1" # todo
 
-    if create_option == "Q+A" and rec_type== 'S11': # todo
+    if create_option == "Q+A" and rec_type == 'S11': # todo
         create_option = "Q+A+V_2" # todo
+
+    if create_option == "Q+A" and rec_type == 'S03': # todo
+        create_option = "Q+ART" # todo
 
 
 
@@ -239,6 +243,9 @@ def generate_question_templates_Sequence(rec: dict):
     if create_option == "Q+A":
         answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " " + rec["answer"]).lower())
         answers_list.append((get_verb_forms(matched_groups[1])['present_participle'] + " the " + matched_groups[2]).lower())
+    elif create_option == "Q+ART":
+        answers_list.append((get_verb_forms(matched_groups[1])['present_participle'] + " the " + matched_groups[2]).lower())
+        answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " " + rec["answer"]).lower())
     elif create_option == "Q+A+V_1":
         answers_list.append(("the " + matched_groups[2].split('the ')[-1]).lower())
         answers_list.append(rec["answer"].lower())
@@ -304,7 +311,66 @@ def generate_question_templates_Sequence(rec: dict):
 
     return fixed_question, fixed_options, answers_list, rec_type
 
+def getvber(input):
+    for rec in input:
+        for item in rec.split():
+            right_item = (item[:-1] if item[-1] == '.' else item).lower()
+            temp_dict = get_verb_forms(right_item)
+            if right_item == temp_dict['past_participle'].lower():
+                return 'past_participle'
+            if right_item == temp_dict['past'].lower():
+                return 'past'
+            if right_item == temp_dict['base'].lower():
+                return 'base'
+            if right_item == temp_dict['present_participle'].lower():
+                return 'present_participle'
+    return 'base'
 
+
+def create_options(answer, input_list):
+    v_type = getvber(answer)
+    output_list = []
+
+    for rec_item in input_list:
+        item_list = rec_item[:-1].split() if rec_item.endswith('.') else rec_item.split()
+
+        if not item_list:
+            continue
+
+        if len(item_list) == 2:
+            if item_list[0].lower() == 'the':
+                output_list.append(" ".join(item_list).lower())
+            else:
+                verb = " ".join(item_list)
+                verb_forms = get_verb_forms(verb.lower())
+                output_list.append(verb_forms[v_type])
+
+        elif len(item_list) == 4:
+            output_list.append(" ".join(item_list[-2:]))
+            verb = " ".join(item_list[:-2])
+            verb_forms = get_verb_forms(verb.lower())
+            output_list.append(verb_forms[v_type])
+
+        elif len(item_list) == 3:
+            output_list.append(" ".join(item_list[-2:]))
+            verb = item_list[0]
+            verb_forms = get_verb_forms(verb.lower())
+            output_list.append(verb_forms[v_type])
+
+        elif len(item_list) == 1:
+            verb = item_list[0]
+            verb_forms = get_verb_forms(verb.lower())
+            output_list.append(verb_forms[v_type])
+
+        else:
+            verb = " ".join(item_list)
+            verb_forms = get_verb_forms(verb.lower())
+            output_list.append(verb_forms[v_type])
+
+    output_list = list(set(output_list))
+    output_list = [rec.lower().capitalize() + '.' for rec in output_list if rec.strip()]
+
+    return output_list
 
 def main():
 
@@ -341,7 +407,7 @@ def main():
         fixed_json_list = []
         for rec in tqdm.tqdm(json_list, total=len(json_list), desc=f"Processing {index}"):
             # try:
-                fixed_question, fixed_options, fixed_answers = [], [], []
+                fixed_question, fixed_options, fixed_answers, types = [], [], [], None
                 if rec['question_id'].split('_')[0] == "Sequence":
                     fixed_question, fixed_options, fixed_answers, types = generate_question_templates_Sequence(rec)
                 elif rec['question_id'].split('_')[0] == "Prediction":
@@ -355,6 +421,10 @@ def main():
 
                 fixed_options += random.choices(select_options['n' if fixed_answers[0].startswith('The') else 'v'], k=random.randint(3, 5))
                 fixed_options = list(set(fixed_options))
+
+
+                fixed_options = create_options(fixed_answers if isinstance(fixed_answers, list) else [fixed_answers], fixed_options)
+
                 random.shuffle(fixed_options)
 
                 fixed_json_list.append(
