@@ -3,7 +3,7 @@ import re
 import sys
 import random
 import json
-import multiprocess
+import multiprocessing
 import tqdm
 
 import spacy
@@ -15,7 +15,12 @@ json_file_list = os.listdir(json_path)
 json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not rec.endswith("fix.json")]
 json_label = json_path.split('/')[-1]
 
-select_type = ["Sequence", "Prediction", ]
+select_type = ["Sequence", "Prediction", "Interaction",]
+
+select_options = {
+    'v': [],
+    'n': [],
+}
 
 prompt_mop = {
     "Sequence": {
@@ -46,24 +51,24 @@ prompt_target = {
     #k keep
     "Sequence": [
         [
-            ("During {} to {}, the person did two things. Please list them sequentially.", 'se',),
-            ("What did the person do from {} to {}? List the things they do sequentially.", 'se',),
-            ("The person did A {} B between {} and {}. What are A and B?", 'bse',),
-            ("Focus on the segment {} - {}. What did the person do {} they {}?", 'sebj',),
-            ("Answer the above question according to the video. Only use words from the following words to organize your answer.", '',),
+            ("During {} to {}, the person did two things. Please list them sequentially.", 'se', 'S00'),
+            ("What did the person do from {} to {}? List the things they do sequentially.", 'se', 'S01'),
+            ("The person did A {} B between {} and {}. What are A and B?", 'bse', 'S02'),
+            ("Focus on the segment {} - {}. What did the person do {} they {}?", 'sebj', 'S03'),
+            ("Answer the above question according to the video. Only use words from the following words to organize your answer.", 'S04',),
         ],
-        # [
-        #     ("Which object did the person {} {} they {} the ___ ? The ___.", 'vbd',),
-        #     ("The person ___ the ___ {} they ___ the ___.", 'b',),
-        #     ("Choose words from the following words to fill in the blanks according to segment {} - {} of the video.", 'se',),
-        # ]
+        [
+            ("Which object did the person {} {} they {} the ___ ? The ___.", 'vbd', 'S10'),
+            ("The person ___ the ___ {} they ___ the ___.", 'b', 'S11'),
+            ("Choose words from the following words to fill in the blanks according to segment {} - {} of the video.", 'se', 'S12'),
+        ]
     ],
     "Prediction":[
-        ("What will the person do after {} - {}?", "se",),
-        ("What will the person do next with the {} after {} - {}?", "nse",),
-        ("Which object would the person {} after {} - {}?", "vse",),
-        ("According to {} - {}, which object would the person {} next after they {} the {}?", "sekkk",),
-        ("Choose answer from the following options.", "",)
+        ("What will the person do after {} - {}?", "se", 'P0'),
+        ("What will the person do next with the {} after {} - {}?", "nse", 'P1'),
+        ("Which object would the person {} after {} - {}?", "vse", 'P2'),
+        ("According to {} - {}, which object would the person {} next after they {} the {}?", "sekkk", 'P3'),
+        ("Choose answer from the following options.", "", 'P4'),
     ]
 
 }
@@ -81,9 +86,9 @@ def get_verb_forms(verb_phrase):
 
     try:
         base = getLemma(verb, upos='VERB')[0]
-        past = getInflection(verb, tag='VBD')[0]
-        past_part = getInflection(verb, tag='VBN')[0]
-        pres_part = getInflection(verb, tag='VBG')[0]
+        past = getInflection(base, tag='VBD')[0]
+        past_part = getInflection(base, tag='VBN')[0]
+        pres_part = getInflection(base, tag='VBG')[0]
     except (IndexError, TypeError):
         # 如果变位失败，使用原形
         base = verb
@@ -192,7 +197,7 @@ def generate_question_templates_Prediction(rec: dict):
     fixed_options = list(set(fixed_options))
     random.shuffle(fixed_options)
 
-    return fixed_question, fixed_options, answers_list
+    return fixed_question, fixed_options, answers_list, choice_group[-1]
 
 def generate_question_templates_Sequence(rec: dict):
     target_id = rec["question_id"].split('_')
@@ -207,7 +212,13 @@ def generate_question_templates_Sequence(rec: dict):
         )
     matched_groups = match.groups() if match.lastindex else ()
 
+    # random_question_id = random.randint(0, prompt_target[target_id[0]] - 1)
+    # prompt_target_choice = prompt_target[target_id[0]][random_question_id]
+    prompt_target_choice = random.choice(prompt_target[target_id[0]])
+
     create_option = "Q+A" if len(matched_groups) > 2 else ""
+    if create_option == "Q+A" and len(prompt_target_choice) == 3:
+        create_option = "Q+A+V"
 
     answers_list = []
 
@@ -219,8 +230,13 @@ def generate_question_templates_Sequence(rec: dict):
     #     answers_list.append((get_verb_forms(rec["answer"][:-1])['ing'] + " " + matched_groups[2]).lower())
 
     if create_option == "Q+A":
-        answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " the " + rec["answer"]).lower())
+        answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " " + rec["answer"]).lower())
         answers_list.append((get_verb_forms(matched_groups[1])['present_participle'] + " the " + matched_groups[2]).lower())
+
+    elif create_option == "Q+A+V":
+        answers_list.append((get_verb_forms(matched_groups[0])['past'] + " " + rec["answer"]).lower())
+        answers_list.append((get_verb_forms(matched_groups[1])['past'] + " the " + matched_groups[2]).lower())
+
     else:
         answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " the " + matched_groups[1]).lower())
         # temp_answer_tamplate = rec["answer"].split(" the ")
@@ -228,11 +244,10 @@ def generate_question_templates_Sequence(rec: dict):
         answers_list.append(rec["answer"].lower())
 
 
+
     fixed_question = ""
 
     answers_list = [_.capitalize() for _ in answers_list]
-
-    prompt_target_choice = random.choice(prompt_target[target_id[0]])
 
     choice_group = random.choice(prompt_target_choice[:-1])
     choice_prompt = choice_group[0]
@@ -246,13 +261,25 @@ def generate_question_templates_Sequence(rec: dict):
         elif func == 'b':
             func_list.append(time_index)
         elif func == 'o':
-            func_list.append(get_verb_forms(answers_list[0])['present_participle'])
+            temp_ans = get_verb_forms(answers_list[0])['present_participle'].lower()
+            func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
             answers_list = [get_verb_forms(answers_list[1])["present_participle"]]
         elif func == 'j':
-            func_list.append(get_verb_forms(answers_list[0])["past"])
+            temp_ans = get_verb_forms(answers_list[0])['past'].lower()
+            func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
             answers_list = [answers_list[1]]
+        elif func == 'd':
+            temp_ans = get_verb_forms(answers_list[0].split()[0])['past'].lower()
+            func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
+            answers_list = [answers_list[-1]]
+        elif func == 'v':
+            temp_ans = get_verb_forms(answers_list[0].split()[0])['base'].lower()
+            func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
+
+
     if len(func_list) != 0:
         fixed_question = choice_prompt.format(*func_list)
+
 
     choice_group = prompt_target_choice[-1]
     choice_prompt = choice_group[0]
@@ -266,7 +293,7 @@ def generate_question_templates_Sequence(rec: dict):
     if len(func_list) != 0:
         choice_prompt = choice_prompt.format(*func_list)
 
-    fixed_question = "".join([fixed_question, choice_prompt])
+    fixed_question = "".join([fixed_question, ' ', choice_prompt])
 
     fixed_options = [item["choice"] for item in rec["choices"]]
 
@@ -278,7 +305,7 @@ def generate_question_templates_Sequence(rec: dict):
     fixed_options = list(set(fixed_options))
     random.shuffle(fixed_options)
 
-    return fixed_question, None, answers_list
+    return fixed_question, fixed_options, answers_list, choice_group[-1]
 
 
 
@@ -286,16 +313,30 @@ def main():
 
     # read files
     json_files_dict = {}
-    for json_file_name in json_file_list:
+    for json_file_name in tqdm.tqdm(json_file_list, total=len(json_file_list), desc="Processing json files"):
         with open(os.path.join(json_path, json_file_name), 'r') as file:
             json_files_dict[json_file_name] = json.load(file)
 
+    for json_file_name, json_data in tqdm.tqdm(json_files_dict.items(), total=len(json_files_dict), desc="Processing json files"):
+        for rec in tqdm.tqdm(json_data, total=len(json_data), desc="Processing json files"):
+            for _ in rec["choices"]:
+                if _["choice"].startswith("The"):
+                    select_options['n'].append(_["choice"])
+                else:
+                    select_options['v'].append(_["choice"])
+
+
     # split useful data
-    for index, json_list in json_files_dict.items():
+    for index, json_list in tqdm.tqdm(json_files_dict.items(), total=len(json_files_dict), desc="Processing json files"):
         json_files_dict[index] = [
             rec for rec in json_list
             if rec['question_id'].split('_')[0] in select_type
         ]
+
+
+    # with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+
+    #     pass
 
     # change dataset
     fixed_json_files_dict = {}
@@ -305,14 +346,24 @@ def main():
             # try:
                 fixed_question, fixed_options, fixed_answers = [], [], []
                 if rec['question_id'].split('_')[0] == "Sequence":
-                    fixed_question, fixed_options, fixed_answers = generate_question_templates_Sequence(rec)
+                    fixed_question, fixed_options, fixed_answers, types = generate_question_templates_Sequence(rec)
                 elif rec['question_id'].split('_')[0] == "Prediction":
-                    fixed_question, fixed_options, fixed_answers = generate_question_templates_Prediction(rec)
+                    fixed_question, fixed_options, fixed_answers, types = generate_question_templates_Prediction(rec)
+                elif rec['question_id'].split('_')[0] == "Interaction":
+                    fixed_question, fixed_options, fixed_answers, types = (
+                        "".join([rec["question"], " ",  f"Choose answer from the following options according to fragment {rec["start"]} - {rec["end"]} of the video."]),
+                        [item["choice"] for item in rec["choices"]],
+                        rec["answer"], 'I0',
+                    )
+
+                fixed_options += random.choices(select_options['n' if fixed_answers[0].startswith('The') else 'v'], k=random.randint(3, 5))
+                fixed_options = list(set(fixed_options))
 
                 fixed_json_list.append(
                     {
                         "dataset": json_label,
                         "task": rec['question_id'].split('_')[0],
+                        "fixed_type": types,
                         'id': rec['question_id'],
                         "video": rec['video_id'] + '.mp4',
                         'tgt': [
