@@ -64,11 +64,12 @@ prompt_target = {
         ]
     ],
     "Prediction":[
-        ("What will the person do after {} seconds - {} seconds?", "se", 'P0'),
-        ("What will the person do next with the {} after {} seconds - {} seconds?", "nse", 'P1'),
+        ("What will the person do after {} seconds - {} seconds?", "se", 'P0',),
+        ("What will the person do next with the {} after {} seconds - {} seconds?", "nse", 'P1',),
         ("Which object would the person {} after {} seconds - {} seconds?", "vse", 'P2'),
-        ("According to {} seconds - {} seconds, which object would the person {} next after they {} the {}?", "sekkk", 'P3'),
-        ("Choose answer from the following options.", "", 'P4'),
+        ("According to {} seconds - {} seconds, which object would the person {} next after they {} the {}?", "sekkk", 'P3',),
+        ("Choose answer from the following options.", "", 'P4',),
+        ("Only use words from the following words to organize your answer.", "", 'P5',),
     ]
 
 }
@@ -175,7 +176,10 @@ def generate_question_templates_Prediction(rec: dict):
         fixed_question = choice_prompt.format(*func_list)
 
     rec_type = choice_group[-1]
-    choice_group = prompt_target[target_id[0]][-1]
+    if rec_type == 'P0':
+        choice_group = prompt_target[target_id[0]][-1]
+    else:
+        choice_group = prompt_target[target_id[0]][-2]
     choice_prompt = choice_group[0]
 
     func_list = []
@@ -236,9 +240,6 @@ def generate_question_templates_Sequence(rec: dict):
     if create_option == "Q+A" and (rec_type == 'S03' or ((rec_type == 'S01' or rec_type == 'S00') and time_index == 'after')): # todo
         create_option = "Q+ART" # todo
 
-
-
-
     answers_list = []
     if create_option == "Q+A":
         answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " " + rec["answer"]).lower())
@@ -277,6 +278,9 @@ def generate_question_templates_Sequence(rec: dict):
         elif func == 'd':
             temp_ans = get_verb_forms(matched_groups[1])['past'].lower()
             func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
+        elif func == 'v' and rec_type == 'S10':
+            temp_ans = get_verb_forms(matched_groups[0])['base'].lower()
+            func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
         elif func == 'v':
             temp_ans = get_verb_forms(answers_list[0].split()[0])['base'].lower()
             func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
@@ -312,19 +316,25 @@ def generate_question_templates_Sequence(rec: dict):
     return fixed_question, fixed_options, answers_list, rec_type
 
 def getvber(input):
+    state_v = 'base'
+    lent = -1
     for rec in input:
-        for item in rec.split():
-            right_item = (item[:-1] if item[-1] == '.' else item).lower()
-            temp_dict = get_verb_forms(right_item)
-            if right_item == temp_dict['past_participle'].lower():
-                return 'past_participle'
-            if right_item == temp_dict['past'].lower():
-                return 'past'
-            if right_item == temp_dict['base'].lower():
-                return 'base'
-            if right_item == temp_dict['present_participle'].lower():
-                return 'present_participle'
-    return 'base'
+        item = rec.split()[0]
+        right_item = (item[:-1] if item[-1] == '.' else item).lower()
+        temp_dict = get_verb_forms(right_item)
+        lent_a = len(set([item for ind, item in temp_dict.items()]))
+        if right_item == temp_dict['past_participle'].lower() and lent < lent_a:
+            state_v = 'past_participle'
+        if right_item == temp_dict['past'].lower() and lent < lent_a:
+            state_v = 'past'
+        if right_item == temp_dict['base'].lower() and lent < lent_a:
+            state_v = 'base'
+        if right_item == temp_dict['present_participle'].lower() and lent < lent_a:
+            state_v = 'present_participle'
+        lent = lent_a
+        # if len(set([item for ind, item in temp_dict.items()])) < len(temp_dict):
+        #     continue
+    return state_v
 
 
 def create_options(answer, input_list):
@@ -402,7 +412,7 @@ def main():
     for index, json_list in json_files_dict.items():
         fixed_json_list = []
         for rec in tqdm.tqdm(json_list, total=len(json_list), desc=f"Processing {index}"):
-            # try:
+            try:
                 fixed_question, fixed_options, fixed_answers, types = [], [], [], None
                 if rec['question_id'].split('_')[0] == "Sequence":
                     fixed_question, fixed_options, fixed_answers, types = generate_question_templates_Sequence(rec)
@@ -415,19 +425,33 @@ def main():
                         rec["answer"], 'I0',
                     )
 
-                if not isinstance(fixed_answers, list) and fixed_answers.startswith("The "):
-                    fixed_options = [_ for _ in fixed_options if _.startswith("The ")]
+                if not isinstance(fixed_answers, list):
+                    if fixed_answers.startswith("The "):
+                        fixed_options = [_ for _ in fixed_options if _.startswith("The ")]
+                    else:
+                        fixed_options = [_ for _ in fixed_options if not _.startswith("The ")]
+                else:
+                    if fixed_answers[0].startswith("The "):
+                        fixed_options = [_ for _ in fixed_options if _.startswith("The ")]
+                    else:
+                        fixed_options = [_ for _ in fixed_options if not _.startswith("The ")]
+
                 fixed_options += random.choices(
                     select_options[
                         'n' if (fixed_answers[0] if isinstance(fixed_answers, list) else fixed_answers).startswith('The ') else 'v'
                     ],
-                    k=random.randint(3, 5),
+                    k=random.randint(4, 8),
                 )
+
                 fixed_options = list(set(fixed_options))
-                # if not isinstance(fixed_answers, list) and fixed_answers.startswith("The "):
-                #     fixed_options = [_ for _ in fixed_options if _.startswith("The ")]
 
                 fixed_options = create_options(fixed_answers if isinstance(fixed_answers, list) else [fixed_answers], fixed_options)
+
+                _ = fixed_answers if not isinstance(fixed_answers, list) else fixed_answers[0]
+                if _.startswith("The "):
+                    fixed_options = [_ for _ in fixed_options if _.startswith("The ")]
+                elif len(_.split()) == 1:
+                    fixed_options = [_ for _ in fixed_options if not _.startswith("The ")]
 
                 random.shuffle(fixed_options)
 
@@ -463,8 +487,8 @@ def main():
                         "options": fixed_options,
                     }
                 )
-            # except Exception as e:
-            #     print(e)
+            except Exception as e:
+                print(e)
 
         fixed_json_files_dict.update(
             {
