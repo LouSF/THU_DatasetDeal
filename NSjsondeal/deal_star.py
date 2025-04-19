@@ -233,7 +233,7 @@ def generate_question_templates_Sequence(rec: dict):
     if create_option == "Q+A" and rec_type == 'S11': # todo
         create_option = "Q+A+V_2" # todo
 
-    if create_option == "Q+A" and rec_type == 'S03': # todo
+    if create_option == "Q+A" and (rec_type == 'S03' or ((rec_type == 'S01' or rec_type == 'S00') and time_index == 'after')): # todo
         create_option = "Q+ART" # todo
 
 
@@ -383,11 +383,7 @@ def main():
     for json_file_name, json_data in tqdm.tqdm(json_files_dict.items(), total=len(json_files_dict), desc="Processing json files"):
         for rec in tqdm.tqdm(json_data, total=len(json_data), desc="Processing json files"):
             for _ in rec["choices"]:
-                if _["choice"].startswith("The"):
-                    select_options['n'].append(_["choice"])
-                else:
-                    select_options['v'].append(_["choice"])
-
+                select_options['n' if _["choice"].startswith("The ") else 'v'].append(_["choice"])
 
     # split useful data
     for index, json_list in tqdm.tqdm(json_files_dict.items(), total=len(json_files_dict), desc="Processing json files"):
@@ -419,9 +415,17 @@ def main():
                         rec["answer"], 'I0',
                     )
 
-                fixed_options += random.choices(select_options['n' if fixed_answers[0].startswith('The') else 'v'], k=random.randint(3, 5))
+                if not isinstance(fixed_answers, list) and fixed_answers.startswith("The "):
+                    fixed_options = [_ for _ in fixed_options if _.startswith("The ")]
+                fixed_options += random.choices(
+                    select_options[
+                        'n' if (fixed_answers[0] if isinstance(fixed_answers, list) else fixed_answers).startswith('The ') else 'v'
+                    ],
+                    k=random.randint(3, 5),
+                )
                 fixed_options = list(set(fixed_options))
-
+                # if not isinstance(fixed_answers, list) and fixed_answers.startswith("The "):
+                #     fixed_options = [_ for _ in fixed_options if _.startswith("The ")]
 
                 fixed_options = create_options(fixed_answers if isinstance(fixed_answers, list) else [fixed_answers], fixed_options)
 

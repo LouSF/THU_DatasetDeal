@@ -13,6 +13,10 @@ json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not
 json_label = json_path.split('/')[-1]
 
 all_selc = {
+    "letter":[
+        "What is the order of the letters at the end?",
+        "What letters did the person show in order?",
+    ],
     "counting": [
         "How many letters changed position in the word after shuffling?",
         "How many objects did you see the person placing in the door area?",
@@ -54,7 +58,6 @@ all_selc = {
         "The person makes sets of repeated actions. What repeated actions did the person do?",
         "Which statement describes better the actions done by the person?",
         "Is the bag empty at the end?",
-        "What is the order of the letters at the end?",
         "Can the person close the door during the last attempt?",
         "Can the box be closed at the end?",
         "What happened once the person removed an object from the tabletop?",
@@ -69,7 +72,6 @@ all_selc = {
         "What changed on the table while the camera was looking away?",
         "What was the order of the letters at the beginning?",
         "Which object was removed by the person from the tabletop?",
-        "What letters did the person show in order?",
         "What letter did the person write first on the paper?",
         "What would be the order of the written letters if the person had written them in reverse order?",
         "What was the second letter written on the paper?",
