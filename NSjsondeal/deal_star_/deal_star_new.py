@@ -34,7 +34,7 @@ prompt_template_input = {
         "T2": {
             "question": r"^Which object did the person ([\w\s'/]+) before they ([\w\s'/]+) the ([\w\s'/]+)\?",
             "answer": r"^The ([\w\s'/]+)\.",
-            "type": ["verb_2", "verb_1", "noun_1", "noun_2",],
+            "type": ["verb_1", "verb_2", "noun_2", "noun_1",],
         },
         "T3": {
             "question": r"^What happened after the person ([\w\s'/]+) the ([\w\s'/]+)\?",
@@ -44,7 +44,7 @@ prompt_template_input = {
         "T4": {
             "question": r"^What happened before the person ([\w\s'/]+) the ([\w\s'/]+)\?",
             "answer": r"^([\w\s'/]+) the ([\w\s'/]+)\.",
-            "type": ["verb_1", "noun_1", "verb_2", "noun_2",],
+            "type": ["verb_2", "noun_2", "verb_1", "noun_1",],
         },
         "T5": {
             "question": r"^What did the person do to the ([\w\s'/]+) after ([\w\s'/]+) the ([\w\s'/]+)\?",
@@ -54,7 +54,7 @@ prompt_template_input = {
         "T6": {
             "question": r"^What did the person do to the ([\w\s'/]+) before ([\w\s'/]+) the ([\w\s'/]+)\?",
             "answer": r"^([\w\s'/]+)\.",
-            "type": ["noun_2", "verb_1", "noun_1", "verb_2",],
+            "type": ["noun_1", "verb_2", "noun_2", "verb_1",],
         },
     },
     "Prediction": {
@@ -78,7 +78,7 @@ prompt_template_input = {
         "T4": {
             "question": r"^Which object would the person ([\w\s'/]+) next after they ([\w\s'/]+) the ([\w\s'/]+)\?",
             "answer": r"^The ([\w\s'/]+)\.",
-            "type": ["verb_1", "verb_2", "noun_2", "noun_1", ],
+            "type": ["verb_2", "verb_1", "noun_1", "noun_2", ],
 
         },
     }
@@ -94,7 +94,7 @@ prompt_target = {
                 "answer_state": ["verb_1_ing", "noun_1", "verb_2_ing", "noun_2",],
                 "answer_type": "verb+noun",
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
-                "type": "S00", # todo
+                "type": "S00",
             },
             {
                 "question": "What did the person do from {start_time} seconds to {end_time} seconds? List the things they do sequentially.",
@@ -103,7 +103,7 @@ prompt_target = {
                 "answer_state": ["verb_1_ing", "noun_1", "verb_2_ing", "noun_2",],
                 "answer_type": "verb+noun",
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
-                "type": "S01", # todo
+                "type": "S01",
             },
             {
                 "question": "The person did A {loca} B between {start_time} seconds and {end_time} seconds. What are A and B?",
@@ -115,8 +115,8 @@ prompt_target = {
                 "type": "S02",
             },
             {
-                "question": "Focus on the segment {start_time} seconds - {end_time} seconds. What did the person do {verb_1_ed} they {noun_1}?",
-                "question_state": ["start_time", "end_time", "verb_1_ed", "noun_1",],
+                "question": "Focus on the segment {start_time} seconds - {end_time} seconds. What did the person do {loca} {verb_1_ed} they {noun_1}?",
+                "question_state": ["start_time", "end_time", "loca", "verb_1_ed", "noun_1",],
                 "answer": ["{verb_2_ed} the {noun_2}.",],
                 "answer_state": ["verb_2_ed", "noun_2",],
                 "answer_type": "verb+noun",
@@ -441,7 +441,7 @@ def main():
         # fixed_json_list = []
         # for _ in json_list:
         #     fixed_json_list.append(json_file_creator(_))
-        with multiprocessing.Pool(processes = 8) as pool:
+        with multiprocessing.Pool(processes = 16) as pool:
             fixed_json_list = list(tqdm.tqdm(pool.imap(json_file_creator, json_list),total=len(json_list), desc="Processing json files"))
 
 
