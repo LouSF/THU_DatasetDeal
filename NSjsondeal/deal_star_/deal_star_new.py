@@ -27,57 +27,57 @@ select_type = ["Sequence", "Prediction", "Interaction",]
 prompt_template_input = {
     "Sequence": {
         "T1": {
-            "question": r"^Which object did the person (.*?) after they (.*?) the (.*?)\?",
-            "answer": r"^The ([^.]*)\.",
+            "question": r"^Which object did the person ([\w\s'/]+) after they ([\w\s'/]+) the ([\w\s'/]+)\?",
+            "answer": r"^The ([\w\s'/]+)\.",
             "type": ["verb_2", "verb_1", "noun_1", "noun_2",],
         },
         "T2": {
-            "question": r"^Which object did the person (.*?) before they (.*?) the (.*?)\?",
-            "answer": r"^The ([^.]*)\.",
+            "question": r"^Which object did the person ([\w\s'/]+) before they ([\w\s'/]+) the ([\w\s'/]+)\?",
+            "answer": r"^The ([\w\s'/]+)\.",
             "type": ["verb_2", "verb_1", "noun_1", "noun_2",],
         },
         "T3": {
-            "question": r"^What happened after the person (.*?) the (.*?)\?",
-            "answer": r"^([^.]*) the ([^.]*)\.",
+            "question": r"^What happened after the person ([\w\s'/]+) the ([\w\s'/]+)\?",
+            "answer": r"^([\w\s'/]+) the ([\w\s'/]+)\.",
             "type": ["verb_1", "noun_1", "verb_2", "noun_2",],
         },
         "T4": {
-            "question": r"^What happened before the person (.*?) the (.*?)\?",
-            "answer": r"^([^.]*) the ([^.]*)\.",
+            "question": r"^What happened before the person ([\w\s'/]+) the ([\w\s'/]+)\?",
+            "answer": r"^([\w\s'/]+) the ([\w\s'/]+)\.",
             "type": ["verb_1", "noun_1", "verb_2", "noun_2",],
         },
         "T5": {
-            "question": r"^What did the person do to the (.*?) after (.*?) the (.*?)\?",
-            "answer": r"^([^.]*)\.",
+            "question": r"^What did the person do to the ([\w\s'/]+) after ([\w\s'/]+) the ([\w\s'/]+)\?",
+            "answer": r"^([\w\s'/]+)\.",
             "type": ["noun_2", "verb_1", "noun_1", "verb_2",],
         },
         "T6": {
-            "question": r"^What did the person do to the (.*?) before (.*?) the (.*?)\?",
-            "answer": r"^([^.]*)\.",
+            "question": r"^What did the person do to the ([\w\s'/]+) before ([\w\s'/]+) the ([\w\s'/]+)\?",
+            "answer": r"^([\w\s'/]+)\.",
             "type": ["noun_2", "verb_1", "noun_1", "verb_2",],
         },
     },
     "Prediction": {
         "T1": {
             "question": r"^What will the person do next?",
-            "answer": r"^([^.]*) the ([^.]*)\.",
+            "answer": r"^([\w\s'/]+) the ([\w\s'/]+)\.",
             "type": ["verb_1", "noun_1",],
         },
         "T2": {
-            "question": r"^What will the person do next with the (.*?)\?",
-            "answer": r"^([^.]*)\.",
+            "question": r"^What will the person do next with the ([\w\s'/]+)\?",
+            "answer": r"^([\w\s'/]+)\.",
             "type": ["noun_1", "verb_1",],
 
         },
         "T3": {
-            "question": r"^Which object would the person (.*?) next\?",
-            "answer": r"^The ([^.]*)\.",
+            "question": r"^Which object would the person ([\w\s'/]+) next\?",
+            "answer": r"^The ([\w\s'/]+)\.",
             "type": ["verb_1", "noun_1",],
 
         },
         "T4": {
-            "question": r"^Which object would the person (.*?) next after they (.*?) the (.*?)\?",
-            "answer": r"^The ([^.]*)\.",
+            "question": r"^Which object would the person ([\w\s'/]+) next after they ([\w\s'/]+) the ([\w\s'/]+)\?",
+            "answer": r"^The ([\w\s'/]+)\.",
             "type": ["verb_1", "verb_2", "noun_2", "noun_1", ],
 
         },
@@ -379,6 +379,10 @@ def generate_question_answer_templates(rec: dict):
     fixed_options = [_ + '.' for _ in list(set(fixed_options))]
 
     prompt_type = "->".join(["_".join(template_id[:-1]), prompt_target_choice["type"],])
+
+    for loc in IR_list_loc:
+        if loc in prompt_target_choice["question_state"]:
+            prompt_type = "_".join([prompt_type, IR_question[loc],])
 
     return fixed_question, fixed_answer, fixed_options, prompt_type
 
