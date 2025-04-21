@@ -167,7 +167,7 @@ prompt_target = {
         {
             "question": "Which object would the person {verb_1_base} after {start_time} seconds - {end_time} seconds?",
             "question_state": ["verb_1_base", "start_time", "end_time",],
-            "answer": ["{noun_1}.",],
+            "answer": ["The {noun_1}.",],
             "answer_state": ["noun_1",],
             "answer_type": ["noun",],
             "add": "Choose answer from the following options.",
@@ -176,7 +176,7 @@ prompt_target = {
         {
             "question": "According to {start_time} seconds - {end_time} seconds, which object would the person {verb_2_base} next after they {verb_1_base} the {noun_1}?",
             "question_state": ["start_time", "end_time", "verb_1_base", "noun_1", "verb_2_base",],
-            "answer": ["{noun_2}.",],
+            "answer": ["The {noun_2}.",],
             "answer_state": ["noun_2",],
             "answer_type": ["noun",],
             "add": "Choose answer from the following options.",
@@ -270,7 +270,7 @@ def generate_question_answer_templates(rec: dict):
     if template_id[0] == "Sequence":
         prompt_target_choice = random.choice(prompt_target_choice)
     elif template_id[0] == "Prediction":
-        if len(answer_match_group) == 4:
+        if template_id[1] == 'T4':
             prompt_target_choice = prompt_target[template_id[0]][-1]
         else:
             prompt_target_choice = random.choice(prompt_target[template_id[0]][:-1])
