@@ -115,10 +115,10 @@ prompt_target = {
                 "type": "S02",
             },
             {
-                "question": "Focus on the segment {start_time} seconds - {end_time} seconds. What did the person do {loca} {verb_1_ed} they {noun_1}?",
-                "question_state": ["start_time", "end_time", "loca", "verb_1_ed", "noun_1",],
-                "answer": ["{verb_2_ed} the {noun_2}.",],
-                "answer_state": ["verb_2_ed", "noun_2",],
+                "question": "Focus on the segment {start_time} seconds - {end_time} seconds. What did the person do {loca} they {verb_2_ed} the {noun_2}?",
+                "question_state": ["start_time", "end_time", "loca", "verb_2_ed", "noun_2",],
+                "answer": ["{verb_1_ed} the {noun_1}.",],
+                "answer_state": ["verb_1_ed", "noun_1",],
                 "answer_type": "verb+noun",
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
                 "type": "S03",
@@ -128,8 +128,8 @@ prompt_target = {
             {
                 "question": "Which object did the person {verb_1_base} {loca} they {verb_2_ed} ___? ___.",
                 "question_state": ["verb_1_base", "loca", "verb_2_ed", "start_time", "end_time",],
-                "answer": ["The {noun_1}.", "The {noun_2}.",],
-                "answer_state": ["noun_1", "noun_2",],
+                "answer": ["The {noun_2}.", "The {noun_1}.",],
+                "answer_state": ["noun_2", "noun_1",],
                 "answer_type": "noun",
                 "add": "Choose words from the following words to fill in the blanks according to segment {start_time} seconds - {end_time} seconds of the video.",
                 "type": "S10",
@@ -174,10 +174,10 @@ prompt_target = {
             "type": "P2",
         },
         {
-            "question": "According to {start_time} seconds - {end_time} seconds, which object would the person {verb_1_base} next after they {verb_2_base} the {noun_2}?",
-            "question_state": ["start_time", "end_time", "verb_1_base", "verb_2_base", "noun_2",],
-            "answer": ["{noun_1}.",],
-            "answer_state": ["noun_1",],
+            "question": "According to {start_time} seconds - {end_time} seconds, which object would the person {verb_2_base} next after they {verb_1_base} the {noun_1}?",
+            "question_state": ["start_time", "end_time", "verb_1_base", "noun_1", "verb_2_base",],
+            "answer": ["{noun_2}.",],
+            "answer_state": ["noun_2",],
             "answer_type": "noun",
             "add": "Choose answer from the following options.",
             "type": "P3",
@@ -240,7 +240,7 @@ def generate_question_answer_templates_Interaction(rec: dict):
 
     prompt_type = "->".join(["_".join(template_id[:-1]), prompt_target_choice["type"],])
 
-    return fixed_question, fixed_answer, fixed_options, prompt_type
+    return fixed_question, fixed_answer, fixed_options, prompt_type, None
 
 def generate_question_answer_templates(rec: dict):
     template_id = rec["question_id"].split('_')
@@ -283,19 +283,36 @@ def generate_question_answer_templates(rec: dict):
     if len(re_type) != len(mixed_match_group):
         raise ValueError()
 
+    if "Sequence_T1" in rec["question_id"]:
+        pass
+
     for type, match in zip(re_type, mixed_match_group):
         dict_IR.update(
             {
                 type: match
             }
         )
+    middle_state = dict_IR.copy()
 
     IR_list_rec = ["start_time", "end_time",]
     IR_list_loc = ["loca",]
     IR_list_noun = ["noun_1", "noun_2",]
-    IR_list_verb = ["verb_1_base", "verb_2_base",
-                    "verb_1_ing", "verb_2_ing",
-                    "verb_1_ed", "verb_2_ed",]
+    IR_list_verb = [
+        "verb_1_base", "verb_2_base",
+        "verb_1_ing", "verb_2_ing",
+        "verb_1_ed", "verb_2_ed",
+    ]
+
+    # switch before and after
+    if len(dict_IR) == 4 and IR_list_loc[0] in prompt_target_choice["question"] and question_time_template == 'after':
+        temp_ = dict_IR['verb_1']
+        dict_IR['verb_1'] = dict_IR['verb_2']
+        dict_IR['verb_2'] = temp_
+        temp_ = dict_IR['noun_1']
+        dict_IR['noun_1'] = dict_IR['noun_2']
+        dict_IR['noun_2'] = temp_
+
+
 
     if debug:
         print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
@@ -371,9 +388,9 @@ def generate_question_answer_templates(rec: dict):
     IR_list_option = ["verb", "noun",]
     for IR_item in prompt_target_choice["answer_type"]:
         if "noun" in IR_item:
-            fixed_options.extend(random.choices(select_options[IR_item], k=random.randint(2, 3)))
+            fixed_options.extend(random.choices(select_options[IR_item], k=random.randint(4, 6)))
         if "verb" in IR_item:
-            temp_verb = [get_verb_forms(_)[option_state] for _ in random.choices(select_options[IR_item], k=random.randint(2, 3))]
+            temp_verb = [get_verb_forms(_)[option_state] for _ in random.choices(select_options[IR_item], k=random.randint(4, 6))]
             fixed_options.extend(temp_verb)
 
     fixed_options = [_ + '.' for _ in list(set(fixed_options))]
@@ -384,11 +401,11 @@ def generate_question_answer_templates(rec: dict):
         if loc in prompt_target_choice["question_state"]:
             prompt_type = "_".join([prompt_type, IR_question[loc],])
 
-    return fixed_question, fixed_answer, fixed_options, prompt_type
+    return fixed_question, fixed_answer, fixed_options, prompt_type, middle_state
 
 def json_file_creator(rec: dict) -> dict:
 
-    fixed_question, fixed_answer, fixed_options, prompt_type = generate_question_answer_templates(rec)
+    fixed_question, fixed_answer, fixed_options, prompt_type, middle_state = generate_question_answer_templates(rec)
 
     fixed_json_file = \
         {
@@ -403,6 +420,7 @@ def json_file_creator(rec: dict) -> dict:
             ],
             "original_question": rec['question'],
             "original_answer": rec['answer'],
+            "middle_state": middle_state,
             "conversations": [
                 {
                     "from": "human",
@@ -438,14 +456,14 @@ def main():
 
     fixed_json_files_dict = {}
     for index, json_list in json_files_dict.items():
-        # fixed_json_list = []
-        # for _ in json_list:
-        #     fixed_json_list.append(json_file_creator(_))
-        with multiprocessing.Pool(processes = 16) as pool:
-            fixed_json_list = list(tqdm.tqdm(pool.imap(json_file_creator, json_list),total=len(json_list), desc="Processing json files"))
+        fixed_json_list = []
+        for _ in json_list:
+            fixed_json_list.append(json_file_creator(_))
+        # with multiprocessing.Pool(processes = 16) as pool:
+        #     fixed_json_list = list(tqdm.tqdm(pool.imap(json_file_creator, json_list),total=len(json_list), desc="Processing json files"))
 
 
-        fixed_json_list = [_ for _ in fixed_json_list if _ is not None]
+        # fixed_json_list = [_ for _ in fixed_json_list if _ is not None]
 
         fixed_json_files_dict.update(
             {
