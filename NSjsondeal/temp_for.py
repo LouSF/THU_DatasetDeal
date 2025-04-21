@@ -8,7 +8,7 @@ with open(path, 'r') as f:
     all_data = json.load(f)
 
 for rec in all_data:
-    target = "->".join([rec["fixed_type"], rec['id'].split('_')[:1]])
+    target = rec["fixed_type"]
     if target not in flist:
         flist.update(
             {

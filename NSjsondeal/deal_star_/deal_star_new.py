@@ -18,66 +18,67 @@ json_file_list = os.listdir(json_path)
 json_file_list = [rec for rec in json_file_list if rec.endswith(".json") and not rec.endswith("fix.json")]
 json_label = json_path.split('/')[-1]
 
+debug = False
+
 select_options = {'verb': [], 'noun': [],}
 json_files_dict = {}
-select_type = ["Sequence", "Prediction",]
-# "Interaction", todo
+select_type = ["Sequence", "Prediction", "Interaction",]
 
 prompt_template_input = {
     "Sequence": {
         "T1": {
             "question": r"^Which object did the person (.*?) after they (.*?) the (.*?)\?",
-            "answer": r"^The (.*?).",
-            "type": ["vber_2", "vber_1", "noun_1", "noun_2",],
+            "answer": r"^The ([^.]*)\.",
+            "type": ["verb_2", "verb_1", "noun_1", "noun_2",],
         },
         "T2": {
             "question": r"^Which object did the person (.*?) before they (.*?) the (.*?)\?",
-            "answer": r"^The (.*?).",
-            "type": ["vber_1", "vber_2", "noun_2", "noun_1",],
+            "answer": r"^The ([^.]*)\.",
+            "type": ["verb_1", "verb_2", "noun_2", "noun_1",],
         },
         "T3": {
             "question": r"^What happened after the person (.*?) the (.*?)\?",
-            "answer": r"^(.*?) the (.*?).",
-            "type": ["vber_1", "noun_1", "vber_2", "noun_2",],
+            "answer": r"^([^.]*) the ([^.]*)\.",
+            "type": ["verb_1", "noun_1", "verb_2", "noun_2",],
         },
         "T4": {
             "question": r"^What happened before the person (.*?) the (.*?)\?",
-            "answer": r"^(.*?) the (.*?).",
-            "type": ["vber_2", "noun_2", "vber_1", "noun_1",],
+            "answer": r"^([^.]*) the ([^.]*)\.",
+            "type": ["verb_2", "noun_2", "verb_1", "noun_1",],
         },
         "T5": {
             "question": r"^What did the person do to the (.*?) after (.*?) the (.*?)\?",
-            "answer": r"^(.*?).",
-            "type": ["noun_2", "vber_1", "noun_1", "vber_2",],
+            "answer": r"^([^.]*)\.",
+            "type": ["noun_2", "verb_1", "noun_1", "verb_2",],
         },
         "T6": {
             "question": r"^What did the person do to the (.*?) before (.*?) the (.*?)\?",
-            "answer": r"^(.*?).",
-            "type": ["noun_1", "vber_2", "noun_2", "vber_1",],
+            "answer": r"^([^.]*)\.",
+            "type": ["noun_1", "verb_2", "noun_2", "verb_1",],
         },
     },
     "Prediction": {
         "T1": {
             "question": r"^What will the person do next?",
-            "answer": r"^(.*?) the (.*?).",
-            "type": ["vber_1", "noun_1",],
+            "answer": r"^([^.]*) the ([^.]*)\.",
+            "type": ["verb_1", "noun_1",],
         },
         "T2": {
             "question": r"^What will the person do next with the (.*?)\?",
-            "answer": r"^(.*?).",
-            "type": ["noun_1", "vber_1",],
+            "answer": r"^([^.]*)\.",
+            "type": ["noun_1", "verb_1",],
 
         },
         "T3": {
             "question": r"^Which object would the person (.*?) next\?",
-            "answer": r"^The (.*?).",
-            "type": ["vber_1", "noun_1",],
+            "answer": r"^The ([^.]*)\.",
+            "type": ["verb_1", "noun_1",],
 
         },
         "T4": {
             "question": r"^Which object would the person (.*?) next after they (.*?) the (.*?)\?",
-            "answer": r"^The (.*?).",
-            "type": ["vber_1", "vber_2", "noun_2", "noun_1", ],
+            "answer": r"^The ([^.]*)\.",
+            "type": ["verb_1", "verb_2", "noun_2", "noun_1", ],
 
         },
     }
@@ -107,7 +108,7 @@ prompt_target = {
             {
                 "question": "The person did A {loca} B between {start_time} seconds and {end_time} seconds. What are A and B?",
                 "question_state": ["loca", "start_time", "end_time",],
-                "answer": ["{verb_1} the {noun_1}.", "{verb_2} the {noun_2}.",],
+                "answer": ["{verb_1_ing} the {noun_1}.", "{verb_2_ing} the {noun_2}.",],
                 "answer_state": ["verb_1_ing", "noun_1", "verb_2_ing", "noun_2",],
                 "answer_type": "verb+noun",
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
@@ -129,20 +130,22 @@ prompt_target = {
                 "question_state": ["verb_1_base", "loca", "verb_2_ed", "start_time", "end_time",],
                 "answer": ["The {noun_1}.", "The {noun_2}.",],
                 "answer_state": ["noun_1", "noun_2",],
-                "add": "Choose words from the following words to fill in the blanks according to segment {} seconds - {} seconds of the video.",
+                "answer_type": "noun",
+                "add": "Choose words from the following words to fill in the blanks according to segment {start_time} seconds - {end_time} seconds of the video.",
                 "type": "S10",
             },
             {
-                "question": "The person ___ {} they ___.",
+                "question": "The person ___ {loca} they ___.",
                 "question_state": ["loca", "start_time", "end_time",],
                 "answer": ["{verb_1_ed} the {noun_1}.", "{verb_2_ed} the {noun_2}.",],
-                "answer_state": ["verb_2_ed", "noun_2",],
-                "add": "Choose words from the following words to fill in the blanks according to segment {} seconds - {} seconds of the video.",
+                "answer_state": ["verb_1_ed", "noun_1", "verb_2_ed", "noun_2",],
+                "answer_type": "verb+noun",
+                "add": "Choose words from the following words to fill in the blanks according to segment {start_time} seconds - {end_time} seconds of the video.",
                 "type": "S11",
             },
         ]
     ],
-    "Prediction":[
+    "Prediction": [
         {
             "question": "What will the person do after {start_time} seconds - {end_time} seconds?",
             "question_state": ["start_time", "end_time",],
@@ -179,7 +182,12 @@ prompt_target = {
             "add": "Choose answer from the following options.",
             "type": "P3",
         },
-    ]
+    ],
+    "Interaction": {
+        "question_add": "Choose answer from the following options according to fragment {start_time} seconds - {end_time} seconds of the video.",
+        "answer_type": "verb+noun",
+        "type": "I0",
+    },
 }
 
 def get_verb_forms(verb_phrase):
@@ -214,8 +222,32 @@ def get_verb_forms(verb_phrase):
         'present_participle': f"{pres_part} {other_part}".strip()
     }
 
+def generate_question_answer_templates_Interaction(rec: dict):
+    template_id = rec["question_id"].split('_')
+
+    prompt_target_choice = prompt_target["Interaction"]
+
+    fixed_question = " ".join(
+        [rec["question"], prompt_target_choice["question_add"]]
+    ).format(
+        start_time = rec["start"],
+        end_time = rec["end"],
+    )
+
+    fixed_answer = rec["answer"]
+
+    fixed_options = [item["choice"] for item in rec["choices"]]
+
+    prompt_type = "->".join(["_".join(template_id[:-1]), prompt_target_choice["type"],])
+
+    return fixed_question, fixed_answer, fixed_options, prompt_type
+
 def generate_question_answer_templates(rec: dict):
     template_id = rec["question_id"].split('_')
+
+    if template_id[0] == "Interaction":
+        return generate_question_answer_templates_Interaction(rec)
+
     question_template = prompt_template_input[template_id[0]][template_id[1]]['question']
     answer_template = prompt_template_input[template_id[0]][template_id[1]]['answer']
     re_type = prompt_template_input[template_id[0]][template_id[1]]['type']
@@ -236,8 +268,13 @@ def generate_question_answer_templates(rec: dict):
     prompt_target_choice = random.choice(prompt_target[template_id[0]])
     if template_id[0] == "Sequence":
         prompt_target_choice = random.choice(prompt_target_choice)
-    elif template_id[0] == "Prediction" and len(answer_match_group) == 4:
-        prompt_target_choice = prompt_target[template_id[0]][-1]
+    elif template_id[0] == "Prediction":
+        if len(answer_match_group) == 4:
+            prompt_target_choice = prompt_target[template_id[0]][-1]
+        else:
+            prompt_target_choice = random.choice(prompt_target[template_id[0]][:-1])
+    else:
+        raise ValueError()
 
     dict_IR = {}
     IR_question = {}
@@ -256,32 +293,41 @@ def generate_question_answer_templates(rec: dict):
     IR_list_rec = ["start_time", "end_time",]
     IR_list_loc = ["loca",]
     IR_list_noun = ["noun_1", "noun_2",]
-    IR_list_verb = ["verb_1_base", "verb_2_base", "verb_1_ing", "verb_2_ing", "verb_2_ed", "verb_2_ed",]
+    IR_list_verb = ["verb_1_base", "verb_2_base",
+                    "verb_1_ing", "verb_2_ing",
+                    "verb_1_ed", "verb_2_ed",]
+
+    if debug:
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        print(dict_IR)
+        print(IR_question)
+        print(IR_answer)
+        print(question_template)
+        print(prompt_target_choice["question"])
+        print(prompt_target_choice["answer"])
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 
     question_template_fixed = " ".join([prompt_target_choice["question"], prompt_target_choice["add"]])
     for IR_item in prompt_target_choice["question_state"]:
         if IR_item in IR_list_rec:
             IR_question.update({IR_item: rec[IR_item.split('_')[0]], }, )
-    for IR_item in prompt_target_choice["question_state"]:
         if IR_item in IR_list_loc:
             IR_question.update({IR_item: question_time_template, }, )
-    for IR_item in prompt_target_choice["question_state"]:
         if IR_item in IR_list_noun:
             IR_question.update({IR_item: dict_IR[IR_item], }, )
-    for IR_item in prompt_target_choice["question_state"]:
         for IR_item_ in IR_list_verb:
             if IR_item in IR_item_:
-                print(IR_item.split('_'))
-                # print(dict_IR[IR_item.split('_')[:-1]])
-                vber_change = get_verb_forms(dict_IR[IR_item.split('_')[:-1]])
+                vber_change = get_verb_forms(dict_IR["_".join(IR_item.split('_')[:-1])])
                 if "base" in IR_item_:
                     IR_question.update({IR_item_: vber_change["base"], }, )
                 elif "ed" in IR_item_:
                     IR_question.update({IR_item_: vber_change["past"], }, )
                 elif "ing" in IR_item_:
                     IR_question.update({IR_item_: vber_change["present_participle"], }, )
+                else:
+                    raise ValueError()
 
-    fixed_question = question_template_fixed.format(**dict_IR)
+    fixed_question = question_template_fixed.format(**IR_question)
 
     fixed_options = []
 
@@ -289,17 +335,14 @@ def generate_question_answer_templates(rec: dict):
     for IR_item in prompt_target_choice["answer_state"]:
         if IR_item in IR_list_rec:
             IR_answer.update({IR_item: rec[IR_item], }, )
-    for IR_item in prompt_target_choice["answer_state"]:
         if IR_item in IR_list_loc:
             IR_answer.update({IR_item: question_time_template, }, )
-    for IR_item in prompt_target_choice["answer_state"]:
         if IR_item in IR_list_noun:
             IR_answer.update({IR_item: dict_IR[IR_item], }, )
             fixed_options.append(" ".join(["The", IR_item]))
-    for IR_item in prompt_target_choice["answer_state"]:
         for IR_item_ in IR_list_verb:
             if IR_item in IR_item_:
-                vber_change = get_verb_forms(dict_IR[IR_item])
+                vber_change = get_verb_forms(dict_IR["_".join(IR_item.split('_')[:-1])])
                 if "base" in IR_item_:
                     IR_answer.update({IR_item_: vber_change["base"], }, )
                     option_state = "base"
@@ -309,20 +352,33 @@ def generate_question_answer_templates(rec: dict):
                 elif "ing" in IR_item_:
                     IR_answer.update({IR_item_: vber_change["present_participle"], }, )
                     option_state = "present_participle"
+                else:
+                    raise ValueError()
                 fixed_options.append(vber_change[option_state])
 
-    fixed_answer = prompt_target_choice["answer"].format(**dict_IR)
+    if debug:
+        print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+        print(dict_IR)
+        print(IR_question)
+        print(IR_answer)
+        print(prompt_target_choice["question"])
+        print(prompt_target_choice["answer"])
+        print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+
+
+    fixed_answer = [_.format(**IR_answer) for _ in prompt_target_choice["answer"]]
 
     IR_list_option = ["verb", "noun",]
     for IR_item in prompt_target_choice["answer_type"]:
         if "noun" in IR_item:
             fixed_options.extend(random.choices(select_options[IR_item], k=random.randint(2, 3)))
         if "verb" in IR_item:
-            temp_vber = [get_verb_forms(_)[option_state] for _ in random.choices(select_options[IR_item], k=random.randint(2, 3))]
+            temp_verb = [get_verb_forms(_)[option_state] for _ in random.choices(select_options[IR_item], k=random.randint(2, 3))]
+            fixed_options.extend(temp_verb)
 
     fixed_options = [_ + '.' for _ in list(set(fixed_options))]
 
-    prompt_type = "->".join([re_type, prompt_target_choice["type"]])
+    prompt_type = "->".join(["_".join(template_id[:-1]), prompt_target_choice["type"],])
 
     return fixed_question, fixed_answer, fixed_options, prompt_type
 
@@ -378,12 +434,14 @@ def main():
 
     fixed_json_files_dict = {}
     for index, json_list in json_files_dict.items():
-        fixed_json_list = []
-        # with multiprocessing.Pool(processes = 8) as pool:
-        #     fixed_json_list = list(tqdm.tqdm(pool.imap(json_file_creator, json_list),total=len(json_list), desc="Processing json files"))
-        #
-        for _ in json_list:
-            fixed_json_list.append(json_file_creator(_))
+        # fixed_json_list = []
+        # for _ in json_list:
+        #     fixed_json_list.append(json_file_creator(_))
+        with multiprocessing.Pool(processes = 8) as pool:
+            fixed_json_list = list(tqdm.tqdm(pool.imap(json_file_creator, json_list),total=len(json_list), desc="Processing json files"))
+
+
+        fixed_json_list = [_ for _ in fixed_json_list if _ is not None]
 
         fixed_json_files_dict.update(
             {
