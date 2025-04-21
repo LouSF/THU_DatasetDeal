@@ -92,7 +92,7 @@ prompt_target = {
                 "question_state": ["start_time", "end_time",],
                 "answer": ["{verb_1_ing} the {noun_1}.", "{verb_2_ing} the {noun_2}.",],
                 "answer_state": ["verb_1_ing", "noun_1", "verb_2_ing", "noun_2",],
-                "answer_type": "verb+noun",
+                "answer_type": ["verb", "noun",],
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
                 "type": "S00",
             },
@@ -101,7 +101,7 @@ prompt_target = {
                 "question_state": ["start_time", "end_time",],
                 "answer": ["{verb_1_ing} the {noun_1}.", "{verb_2_ing} the {noun_2}.",],
                 "answer_state": ["verb_1_ing", "noun_1", "verb_2_ing", "noun_2",],
-                "answer_type": "verb+noun",
+                "answer_type": ["verb", "noun",],
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
                 "type": "S01",
             },
@@ -110,7 +110,7 @@ prompt_target = {
                 "question_state": ["loca", "start_time", "end_time",],
                 "answer": ["{verb_1_ing} the {noun_1}.", "{verb_2_ing} the {noun_2}.",],
                 "answer_state": ["verb_1_ing", "noun_1", "verb_2_ing", "noun_2",],
-                "answer_type": "verb+noun",
+                "answer_type": ["verb", "noun",],
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
                 "type": "S02",
             },
@@ -119,7 +119,7 @@ prompt_target = {
                 "question_state": ["start_time", "end_time", "loca", "verb_2_ed", "noun_2",],
                 "answer": ["{verb_1_ed} the {noun_1}.",],
                 "answer_state": ["verb_1_ed", "noun_1",],
-                "answer_type": "verb+noun",
+                "answer_type": ["verb", "noun",],
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
                 "type": "S03",
             },
@@ -130,7 +130,7 @@ prompt_target = {
                 "question_state": ["verb_1_base", "loca", "verb_2_ed", "start_time", "end_time",],
                 "answer": ["The {noun_2}.", "The {noun_1}.",],
                 "answer_state": ["noun_2", "noun_1",],
-                "answer_type": "noun",
+                "answer_type": ["noun",],
                 "add": "Choose words from the following words to fill in the blanks according to segment {start_time} seconds - {end_time} seconds of the video.",
                 "type": "S10",
             },
@@ -139,7 +139,7 @@ prompt_target = {
                 "question_state": ["loca", "start_time", "end_time",],
                 "answer": ["{verb_1_ed} the {noun_1}.", "{verb_2_ed} the {noun_2}.",],
                 "answer_state": ["verb_1_ed", "noun_1", "verb_2_ed", "noun_2",],
-                "answer_type": "verb+noun",
+                "answer_type": ["verb", "noun",],
                 "add": "Choose words from the following words to fill in the blanks according to segment {start_time} seconds - {end_time} seconds of the video.",
                 "type": "S11",
             },
@@ -151,7 +151,7 @@ prompt_target = {
             "question_state": ["start_time", "end_time",],
             "answer": ["{verb_1_base} the {noun_1}.",],
             "answer_state": ["verb_1_base", "noun_1",],
-            "answer_type": "verb+noun",
+            "answer_type": ["verb", "noun",],
             "add": "Only use words from the following words to organize your answer.",
             "type": "P0",
         },
@@ -160,7 +160,7 @@ prompt_target = {
             "question_state": ["noun_1", "start_time", "end_time",],
             "answer": ["{verb_1_base}.",],
             "answer_state": ["verb_1_base",],
-            "answer_type": "verb",
+            "answer_type": ["verb",],
             "add": "Choose answer from the following options.",
             "type": "P1",
         },
@@ -169,7 +169,7 @@ prompt_target = {
             "question_state": ["verb_1_base", "start_time", "end_time",],
             "answer": ["{noun_1}.",],
             "answer_state": ["noun_1",],
-            "answer_type": "noun",
+            "answer_type": ["noun",],
             "add": "Choose answer from the following options.",
             "type": "P2",
         },
@@ -178,14 +178,14 @@ prompt_target = {
             "question_state": ["start_time", "end_time", "verb_1_base", "noun_1", "verb_2_base",],
             "answer": ["{noun_2}.",],
             "answer_state": ["noun_2",],
-            "answer_type": "noun",
+            "answer_type": ["noun",],
             "add": "Choose answer from the following options.",
             "type": "P3",
         },
     ],
     "Interaction": {
         "question_add": "Choose answer from the following options according to fragment {start_time} seconds - {end_time} seconds of the video.",
-        "answer_type": "verb+noun",
+        "answer_type": ["verb", "noun",],
         "type": "I0",
     },
 }
@@ -263,7 +263,8 @@ def generate_question_answer_templates(rec: dict):
 
     question_match_group = question_match.groups() if question_match.lastindex else ()
     answer_match_group = answer_match.groups() if answer_match.lastindex else ()
-    mixed_match_group = question_match_group + answer_match_group
+    mixed_match_group = [_.lower() for _ in question_match_group + answer_match_group]
+
 
     prompt_target_choice = random.choice(prompt_target[template_id[0]])
     if template_id[0] == "Sequence":
@@ -384,16 +385,21 @@ def generate_question_answer_templates(rec: dict):
 
 
     fixed_answer = [_.format(**IR_answer) for _ in prompt_target_choice["answer"]]
+    fixed_answer = [_.lower().capitalize() for _ in fixed_answer]
+    for _ in fixed_answer:
+        if not _.endswith('.'):
+            _ += '.'
 
-    IR_list_option = ["verb", "noun",]
-    for IR_item in prompt_target_choice["answer_type"]:
-        if "noun" in IR_item:
-            fixed_options.extend(random.choices(select_options[IR_item], k=random.randint(4, 6)))
-        if "verb" in IR_item:
-            temp_verb = [get_verb_forms(_)[option_state] for _ in random.choices(select_options[IR_item], k=random.randint(4, 6))]
-            fixed_options.extend(temp_verb)
+    if "noun" in prompt_target_choice["answer_type"]:
+        fixed_options.extend(random.choices(select_options["noun"], k=random.randint(4, 6)))
+    if "verb" in prompt_target_choice["answer_type"]:
+        temp_verb = [get_verb_forms(_)[option_state] for _ in random.choices(select_options["verb"], k=random.randint(4, 6))]
+        fixed_options.extend(temp_verb)
 
-    fixed_options = [_ + '.' for _ in list(set(fixed_options))]
+    fixed_options = [_.lower().capitalize() for _ in fixed_options]
+    for _ in fixed_options:
+        if not _.endswith('.'):
+            _ += '.'
 
     prompt_type = "->".join(["_".join(template_id[:-1]), prompt_target_choice["type"],])
 
