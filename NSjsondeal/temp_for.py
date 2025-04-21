@@ -15,11 +15,6 @@ for rec in all_data:
                 target: [],
             }
         )
-    rec.update(
-        {
-            "check_target": target,
-        }
-    )
     flist[target].append(rec)
 
 selc_data = []

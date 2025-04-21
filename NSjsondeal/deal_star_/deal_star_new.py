@@ -34,7 +34,7 @@ prompt_template_input = {
         "T2": {
             "question": r"^Which object did the person (.*?) before they (.*?) the (.*?)\?",
             "answer": r"^The ([^.]*)\.",
-            "type": ["verb_1", "verb_2", "noun_2", "noun_1",],
+            "type": ["verb_2", "verb_1", "noun_1", "noun_2",],
         },
         "T3": {
             "question": r"^What happened after the person (.*?) the (.*?)\?",
@@ -44,7 +44,7 @@ prompt_template_input = {
         "T4": {
             "question": r"^What happened before the person (.*?) the (.*?)\?",
             "answer": r"^([^.]*) the ([^.]*)\.",
-            "type": ["verb_2", "noun_2", "verb_1", "noun_1",],
+            "type": ["verb_1", "noun_1", "verb_2", "noun_2",],
         },
         "T5": {
             "question": r"^What did the person do to the (.*?) after (.*?) the (.*?)\?",
@@ -54,7 +54,7 @@ prompt_template_input = {
         "T6": {
             "question": r"^What did the person do to the (.*?) before (.*?) the (.*?)\?",
             "answer": r"^([^.]*)\.",
-            "type": ["noun_1", "verb_2", "noun_2", "verb_1",],
+            "type": ["noun_2", "verb_1", "noun_1", "verb_2",],
         },
     },
     "Prediction": {
@@ -94,7 +94,7 @@ prompt_target = {
                 "answer_state": ["verb_1_ing", "noun_1", "verb_2_ing", "noun_2",],
                 "answer_type": "verb+noun",
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
-                "type": "S00",
+                "type": "S00", # todo
             },
             {
                 "question": "What did the person do from {start_time} seconds to {end_time} seconds? List the things they do sequentially.",
@@ -103,7 +103,7 @@ prompt_target = {
                 "answer_state": ["verb_1_ing", "noun_1", "verb_2_ing", "noun_2",],
                 "answer_type": "verb+noun",
                 "add": "Answer the above question according to the video. Only use words from the following words to organize your answer.",
-                "type": "S01",
+                "type": "S01", # todo
             },
             {
                 "question": "The person did A {loca} B between {start_time} seconds and {end_time} seconds. What are A and B?",
@@ -339,7 +339,7 @@ def generate_question_answer_templates(rec: dict):
             IR_answer.update({IR_item: question_time_template, }, )
         if IR_item in IR_list_noun:
             IR_answer.update({IR_item: dict_IR[IR_item], }, )
-            fixed_options.append(" ".join(["The", IR_item]))
+            fixed_options.append(" ".join(["The", dict_IR[IR_item]]))
         for IR_item_ in IR_list_verb:
             if IR_item in IR_item_:
                 vber_change = get_verb_forms(dict_IR["_".join(IR_item.split('_')[:-1])])
