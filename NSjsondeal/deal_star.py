@@ -74,7 +74,6 @@ prompt_target = {
 
 }
 
-
 def get_verb_forms(verb_phrase):
     words = verb_phrase.split()
 
@@ -229,7 +228,18 @@ def generate_question_templates_Sequence(rec: dict):
     choice_prompt = choice_group[0]
     rec_type = choice_group[-1]
 
-    create_option = "Q+A" if len(matched_groups) > 2 else ""
+    # create_option = "Q+A" if len(matched_groups) > 2 else ""
+    create_option = ""
+    if len(matched_groups) == 2:
+        create_option = "Q+A_2"
+    elif len(matched_groups) > 2:
+        if target_id[1] == 'T5' or target_id[1] == 'T6':
+            if rec_type == 'S10':
+                create_option = "Q+A_T56_2"
+            else:
+                create_option = "Q+A_T56"
+        else:
+            create_option = "Q+A"
 
     if create_option == "Q+A" and rec_type == 'S10': # todo
         create_option = "Q+A+V_1" # todo
@@ -244,6 +254,12 @@ def generate_question_templates_Sequence(rec: dict):
     if create_option == "Q+A":
         answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " " + rec["answer"]).lower())
         answers_list.append((get_verb_forms(matched_groups[1])['present_participle'] + " the " + matched_groups[2]).lower())
+    elif create_option == "Q+A_T56":
+        answers_list.append((get_verb_forms(rec['answer'][:-1])['present_participle'] + " the " + matched_groups[0]).lower())
+        answers_list.append((get_verb_forms(matched_groups[1])['present_participle'] + " the " + matched_groups[2]).lower())
+    elif create_option == "Q+A_T56_2":
+        answers_list.append(("The " + matched_groups[2]).lower())
+        answers_list.append(("The " + matched_groups[0]).lower())
     elif create_option == "Q+ART":
         answers_list.append((get_verb_forms(matched_groups[1])['present_participle'] + " the " + matched_groups[2]).lower())
         answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " " + rec["answer"]).lower())
@@ -253,6 +269,9 @@ def generate_question_templates_Sequence(rec: dict):
     elif create_option == "Q+A+V_2":
         answers_list.append((get_verb_forms(matched_groups[0])['past'] + " " + rec["answer"]).lower())
         answers_list.append((get_verb_forms(matched_groups[1])['past'] + " the " + matched_groups[2]).lower())
+    elif create_option == "Q+A_2":
+        answers_list.append(" ".join(["The", rec["answer"].split('the ')[1],]).lower())
+        answers_list.append(" ".join(["The", matched_groups[1].lower(),]))
     else:
         answers_list.append((get_verb_forms(matched_groups[0])['present_participle'] + " the " + matched_groups[1]).lower())
         answers_list.append(rec["answer"].lower())
@@ -276,8 +295,15 @@ def generate_question_templates_Sequence(rec: dict):
             func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
             answers_list = [answers_list[1]]
         elif func == 'd':
-            temp_ans = get_verb_forms(matched_groups[1])['past'].lower()
-            func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
+            if create_option == "Q+A_2" or create_option == "Q+A_T56_2":
+                temp_ans = rec['answer'].split("the ")[0].lower()
+                func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
+            # elif create_option == "Q+A_T56_2":
+            #     temp_ans = rec['answer'].split("the ")[0].lower()
+            #     func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
+            else:
+                temp_ans = get_verb_forms(matched_groups[1])['past'].lower()
+                func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
         elif func == 'v' and rec_type == 'S10':
             temp_ans = get_verb_forms(matched_groups[0])['base'].lower()
             func_list.append(temp_ans if temp_ans[-1] != '.' else temp_ans[:-1])
@@ -335,7 +361,6 @@ def getvber(input):
         # if len(set([item for ind, item in temp_dict.items()])) < len(temp_dict):
         #     continue
     return state_v
-
 
 def create_options(answer, input_list):
     v_type = getvber(answer)
@@ -450,7 +475,7 @@ def main():
                 _ = fixed_answers if not isinstance(fixed_answers, list) else fixed_answers[0]
                 if _.startswith("The "):
                     fixed_options = [_ for _ in fixed_options if _.startswith("The ")]
-                elif len(_.split()) == 1:
+                elif len(_.split()) == 1 or len(_.split()) == 2:
                     fixed_options = [_ for _ in fixed_options if not _.startswith("The ")]
 
                 random.shuffle(fixed_options)
@@ -484,7 +509,8 @@ def main():
                             #     "value": fixed_answers["respond"],
                             # }
                         ],
-                        "options": fixed_options,
+                        "options": fixed_options if types != 'I0' else [item["choice"] for item in rec["choices"]],
+                    #      if types == 'I0' else [item["choice"] for item in rec["choices"]],
                     }
                 )
             except Exception as e:
