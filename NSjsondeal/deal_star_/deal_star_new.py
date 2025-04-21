@@ -313,8 +313,6 @@ def generate_question_answer_templates(rec: dict):
         dict_IR['noun_1'] = dict_IR['noun_2']
         dict_IR['noun_2'] = temp_
 
-
-
     if debug:
         print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         print(dict_IR)
@@ -385,21 +383,18 @@ def generate_question_answer_templates(rec: dict):
 
 
     fixed_answer = [_.format(**IR_answer) for _ in prompt_target_choice["answer"]]
+    fixed_answer = [_ + '.' if not _.endswith('.') else _ for _ in fixed_answer]
     fixed_answer = [_.lower().capitalize() for _ in fixed_answer]
-    for _ in fixed_answer:
-        if not _.endswith('.'):
-            _ += '.'
 
     if "noun" in prompt_target_choice["answer_type"]:
         fixed_options.extend(random.choices(select_options["noun"], k=random.randint(4, 6)))
     if "verb" in prompt_target_choice["answer_type"]:
-        temp_verb = [get_verb_forms(_)[option_state] for _ in random.choices(select_options["verb"], k=random.randint(4, 6))]
+        temp_verb = [get_verb_forms(_[:-1] if _.endswith('.') else _)[option_state] for _ in random.choices(select_options["verb"], k=random.randint(4, 6))]
         fixed_options.extend(temp_verb)
 
+    fixed_options = [_ + '.' if not _.endswith('.') else _ for _ in fixed_options]
     fixed_options = [_.lower().capitalize() for _ in fixed_options]
-    for _ in fixed_options:
-        if not _.endswith('.'):
-            _ += '.'
+    fixed_options = list(set(fixed_options))
 
     prompt_type = "->".join(["_".join(template_id[:-1]), prompt_target_choice["type"],])
 
@@ -452,7 +447,14 @@ def main():
     for json_file_name, json_data in tqdm.tqdm(json_files_dict.items(), total=len(json_files_dict), desc="Processing json files"):
         for rec in tqdm.tqdm(json_data, total=len(json_data), desc="Processing json files"):
             for _ in rec["choices"]:
-                select_options['noun' if _["choice"].startswith("The ") else 'verb'].append(_["choice"])
+                if _["choice"].startswith("The "):
+                    select_options['noun'].append(_["choice"])
+                else:
+                    if ' the ' in _["choice"]:
+                        option = _["choice"].split(' the ')[0]
+                        select_options['verb'].append(option if option.endswith('.') else option + '.')
+                    else:
+                        select_options['verb'].append(_["choice"])
 
     for index, json_list in tqdm.tqdm(json_files_dict.items(), total=len(json_files_dict), desc="Processing json files"):
         json_files_dict[index] = [
